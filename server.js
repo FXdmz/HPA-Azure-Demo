@@ -153,6 +153,24 @@ app.post('/api/clear', (req, res) => {
   res.json({ status: 'cleared' });
 });
 
+app.get('/api/list-agents', async (req, res) => {
+  try {
+    const token = await getAccessToken();
+    const response = await fetch(
+      `${ENDPOINT}/assistants?api-version=${API_VERSION}`,
+      {
+        headers: { 'Authorization': `Bearer ${token}` }
+      }
+    );
+    const data = await response.json();
+    console.log('[LIST-AGENTS] Response:', JSON.stringify(data, null, 2));
+    res.json(data);
+  } catch (error) {
+    console.error('[LIST-AGENTS] Error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.use(express.static(join(__dirname, 'dist')));
 app.get('*', (req, res) => res.sendFile(join(__dirname, 'dist', 'index.html')));
 
