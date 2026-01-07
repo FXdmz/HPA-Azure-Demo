@@ -11,6 +11,14 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3001;
 
+console.log('=== ENVIRONMENT CHECK ===');
+console.log('AZURE_TENANT_ID:', process.env.AZURE_TENANT_ID ? '✓ Set' : '✗ MISSING');
+console.log('AZURE_CLIENT_ID:', process.env.AZURE_CLIENT_ID ? '✓ Set' : '✗ MISSING');
+console.log('AZURE_CLIENT_SECRET:', process.env.AZURE_CLIENT_SECRET ? '✓ Set (hidden)' : '✗ MISSING');
+console.log('AI_FOUNDRY_ENDPOINT:', process.env.AI_FOUNDRY_ENDPOINT || '✗ MISSING');
+console.log('AI_AGENT_NAME:', process.env.AI_AGENT_NAME || '✗ MISSING');
+console.log('=========================');
+
 const credential = new ClientSecretCredential(
   process.env.AZURE_TENANT_ID,
   process.env.AZURE_CLIENT_ID,
@@ -20,156 +28,121 @@ const credential = new ClientSecretCredential(
 const ENDPOINT = process.env.AI_FOUNDRY_ENDPOINT;
 const AGENT_NAME = process.env.AI_AGENT_NAME;
 const API_VERSION = "2024-12-01-preview";
+const TOKEN_SCOPE = "https://cognitiveservices.azure.com/.default";
 
 const sessions = new Map();
 
 async function getAccessToken() {
-  const tokenResponse = await credential.getToken("https://cognitiveservices.azure.com/.default");
+  console.log('[AUTH] Requesting token with scope:', TOKEN_SCOPE);
+  const tokenResponse = await credential.getToken(TOKEN_SCOPE);
+  try {
+    const payload = JSON.parse(Buffer.from(tokenResponse.token.split('.')[1], 'base64').toString());
+    console.log('[AUTH] Token audience:', payload.aud);
+  } catch (e) {
+    console.log('[AUTH] Could not decode token');
+  }
   return tokenResponse.token;
 }
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', agent: AGENT_NAME });
+  res.json({ status: 'ok', agent: AGENT_NAME, tokenScope: TOKEN_SCOPE, version: 'debug-v2' });
+});
+
+app.get('/api/debug-token', async (req, res) => {
+  try {
+    const token = await getAccessToken();
+    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64').toString());
+    res.json({
+      success: true,
+      tokenScope: TOKEN_SCOPE,
+      audience: payload.aud,
+      appId: payload.appid,
+      expires: new Date(payload.exp * 1000).toISOString()
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
 });
 
 app.post('/api/chat', async (req, res) => {
   try {
     const { message, sessionId = 'default' } = req.body;
-    
-    if (!message) {
-      return res.status(400).json({ error: 'Message is required' });
-    }
+    if (!message) return res.status(400).json({ error: 'Message is required' });
 
     const token = await getAccessToken();
-    const headers = {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    };
+    const headers = { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' };
 
     let threadId = sessions.get(sessionId);
     let runData;
 
     if (!threadId) {
-      console.log('Creating new thread and run...');
-      const response = await fetch(
-        `${ENDPOINT}/threads/runs?api-version=${API_VERSION}`,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({
-            assistant_id: AGENT_NAME,
-            thread: {
-              messages: [{ role: 'user', content: message }]
-            }
-          })
-        }
-      );
+      console.log('[CHAT] Creating new thread...');
+      const response = await fetch(`${ENDPOINT}/threads/runs?api-version=${API_VERSION}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          assistant_id: AGENT_NAME,
+          thread: { messages: [{ role: 'user', content: message }] }
+        })
+      });
 
       if (!response.ok) {
         const error = await response.text();
-        console.error('Create thread/run error:', error);
+        console.error('[CHAT] Error:', error);
         throw new Error(`Failed to create thread: ${error}`);
       }
 
       runData = await response.json();
       threadId = runData.thread_id;
       sessions.set(sessionId, threadId);
-      console.log('Thread created:', threadId);
     } else {
-      console.log('Adding message to thread:', threadId);
-      
-      const msgResponse = await fetch(
-        `${ENDPOINT}/threads/${threadId}/messages?api-version=${API_VERSION}`,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ role: 'user', content: message })
-        }
-      );
+      await fetch(`${ENDPOINT}/threads/${threadId}/messages?api-version=${API_VERSION}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ role: 'user', content: message })
+      });
 
-      if (!msgResponse.ok) {
-        const error = await msgResponse.text();
-        console.error('Add message error:', error);
-        throw new Error(`Failed to add message: ${error}`);
-      }
-
-      const runResponse = await fetch(
-        `${ENDPOINT}/threads/${threadId}/runs?api-version=${API_VERSION}`,
-        {
-          method: 'POST',
-          headers,
-          body: JSON.stringify({ assistant_id: AGENT_NAME })
-        }
-      );
-
-      if (!runResponse.ok) {
-        const error = await runResponse.text();
-        console.error('Create run error:', error);
-        throw new Error(`Failed to create run: ${error}`);
-      }
+      const runResponse = await fetch(`${ENDPOINT}/threads/${threadId}/runs?api-version=${API_VERSION}`, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ assistant_id: AGENT_NAME })
+      });
 
       runData = await runResponse.json();
     }
 
-    console.log('Polling run:', runData.id);
     let status = runData.status;
     let attempts = 0;
-    const maxAttempts = 60;
-
-    while ((status === 'queued' || status === 'in_progress') && attempts < maxAttempts) {
+    while ((status === 'queued' || status === 'in_progress') && attempts < 60) {
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
-      const statusResponse = await fetch(
-        `${ENDPOINT}/threads/${threadId}/runs/${runData.id}?api-version=${API_VERSION}`,
-        { headers }
-      );
-      
+      const statusResponse = await fetch(`${ENDPOINT}/threads/${threadId}/runs/${runData.id}?api-version=${API_VERSION}`, { headers });
       const statusData = await statusResponse.json();
       status = statusData.status;
-      console.log(`Run status (${attempts + 1}):`, status);
       attempts++;
     }
 
-    if (status !== 'completed') {
-      throw new Error(`Run ended with status: ${status}`);
-    }
+    if (status !== 'completed') throw new Error(`Run ended with status: ${status}`);
 
-    const messagesResponse = await fetch(
-      `${ENDPOINT}/threads/${threadId}/messages?api-version=${API_VERSION}&order=desc&limit=1`,
-      { headers }
-    );
-
+    const messagesResponse = await fetch(`${ENDPOINT}/threads/${threadId}/messages?api-version=${API_VERSION}&order=desc&limit=1`, { headers });
     const messagesData = await messagesResponse.json();
     const assistantMessage = messagesData.data?.[0];
 
-    if (!assistantMessage || assistantMessage.role !== 'assistant') {
-      throw new Error('No assistant response found');
-    }
+    if (!assistantMessage || assistantMessage.role !== 'assistant') throw new Error('No assistant response found');
 
     let content = '';
     const sources = [];
-
     for (const item of assistantMessage.content || []) {
       if (item.type === 'text') {
         content = item.text?.value || '';
-        
         for (const annotation of item.text?.annotations || []) {
-          if (annotation.type === 'file_citation') {
-            sources.push('MovieLabs OMC');
-          }
+          if (annotation.type === 'file_citation') sources.push('MovieLabs OMC');
         }
       }
     }
 
-    res.json({
-      id: assistantMessage.id,
-      content,
-      sources: [...new Set(sources)],
-      threadId
-    });
-
+    res.json({ id: assistantMessage.id, content, sources: [...new Set(sources)], threadId });
   } catch (error) {
-    console.error('Chat error:', error);
+    console.error('[CHAT] Error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -181,13 +154,12 @@ app.post('/api/clear', (req, res) => {
 });
 
 app.use(express.static(join(__dirname, 'dist')));
-
-app.get('*', (req, res) => {
-  res.sendFile(join(__dirname, 'dist', 'index.html'));
-});
+app.get('*', (req, res) => res.sendFile(join(__dirname, 'dist', 'index.html')));
 
 app.listen(PORT, '0.0.0.0', () => {
-  console.log(`Server running on port ${PORT}`);
-  console.log(`Agent: ${AGENT_NAME}`);
-  console.log(`Endpoint: ${ENDPOINT}`);
+  console.log('=== SERVER STARTED ===');
+  console.log('Port:', PORT);
+  console.log('Agent:', AGENT_NAME);
+  console.log('Token Scope:', TOKEN_SCOPE);
+  console.log('======================');
 });
