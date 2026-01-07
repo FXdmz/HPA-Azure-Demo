@@ -21,7 +21,7 @@ export function Login() {
       <header className="border-b border-border bg-card/80 backdrop-blur-sm">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center gap-2">
-            <img src={movieLabsLogo} alt="MovieLabs Logo" className="h-8 w-8" />
+            <img src={movieLabsLogo} alt="MovieLabs Logo" className="h-16 w-16" />
             <div>
               <h1 className="text-lg font-bold text-foreground tracking-tight">
                 HPA 2026 OMC Agent
@@ -39,7 +39,7 @@ export function Login() {
         <Card className="w-full max-w-md bg-card border-border">
           <CardHeader className="text-center">
             <div className="mx-auto mb-4">
-              <img src={greenlightLogo} alt="Greenlight Logo" className="h-16 w-16" />
+              <img src={greenlightLogo} alt="Greenlight Logo" className="h-32 w-32" />
             </div>
             <CardTitle className="text-2xl font-bold text-foreground">
               Welcome to HPA 2026 OMC Agent

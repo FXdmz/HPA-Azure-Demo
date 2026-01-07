@@ -17,7 +17,7 @@ export function Header() {
         {/* Logo & Title */}
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <img src={movieLabsLogo} alt="MovieLabs Logo" className="h-8 w-8" />
+            <img src={movieLabsLogo} alt="MovieLabs Logo" className="h-16 w-16" />
             <div>
               <h1 className="text-lg font-bold text-foreground tracking-tight">
                 HPA 2026 OMC Agent

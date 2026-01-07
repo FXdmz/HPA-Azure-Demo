@@ -135,7 +135,7 @@ export function ChatInterface() {
       <CardHeader className="flex-shrink-0 border-b border-border pb-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src={greenlightLogo} alt="Greenlight Logo" className="h-10 w-10" />
+            <img src={greenlightLogo} alt="Greenlight Logo" className="h-20 w-20" />
             <div>
               <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
                 HPA 2026 OMC Agent
@@ -189,7 +189,7 @@ export function ChatInterface() {
             {messages.length === 0 && !isLoading && (
               <div className="flex flex-col items-center justify-center h-full py-12 text-center">
                 <div className="mb-4">
-                  <img src={greenlightLogo} alt="Greenlight Logo" className="h-16 w-16" />
+                  <img src={greenlightLogo} alt="Greenlight Logo" className="h-32 w-32" />
                 </div>
                 <h3 className="text-lg font-semibold text-foreground mb-2">
                   Welcome to HPA 2026 OMC Agent
