@@ -11,11 +11,11 @@ deploymentTarget = "static"
 publicDir = "dist"
 
 [[ports]]
-localPort = 5173
+localPort = 5000
 externalPort = 80
 
 [[ports]]
-localPort = 5000
+localPort = 5173
 externalPort = 80
 
 [agent]

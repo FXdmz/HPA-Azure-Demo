@@ -68,7 +68,7 @@ export function ChatInterface() {
         })
         .catch((err) => {
           console.error("Failed to initialize agent:", err);
-          setError("Failed to connect to Truth Engine agent");
+          setError("Failed to connect to HPA 2026 OMC Agent");
         });
     }
   }, [account, instance]);
@@ -141,7 +141,7 @@ export function ChatInterface() {
             </div>
             <div>
               <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
-                Truth Engine
+                HPA 2026 OMC Agent
                 {isInitialized && (
                   <Badge variant="outline" className="text-xs bg-fx-green/20 text-fx-green border-fx-green/30">
                     <Zap className="h-3 w-3 mr-1" />
@@ -199,7 +199,7 @@ export function ChatInterface() {
                   <Bot className="h-8 w-8 text-fx-light-blue" />
                 </div>
                 <h3 className="text-lg font-semibold text-foreground mb-2">
-                  Welcome to Truth Engine
+                  Welcome to HPA 2026 OMC Agent
                 </h3>
                 <p className="text-sm text-muted-foreground max-w-md">
                   Ask questions about MovieLabs OMC ontology or query the ME-NEXUS

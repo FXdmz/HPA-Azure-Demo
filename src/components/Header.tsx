@@ -41,10 +41,10 @@ export function Header() {
             </svg>
             <div>
               <h1 className="text-lg font-bold text-foreground tracking-tight">
-                Truth Engine
+                HPA 2026 OMC Agent
               </h1>
               <p className="text-xs text-muted-foreground">
-                ME-DMZ × MovieLabs OMC
+                MovieLabs x Microsoft
               </p>
             </div>
           </div>

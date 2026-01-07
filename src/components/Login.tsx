@@ -42,10 +42,10 @@ export function Login() {
             </svg>
             <div>
               <h1 className="text-lg font-bold text-foreground tracking-tight">
-                Truth Engine
+                HPA 2026 OMC Agent
               </h1>
               <p className="text-xs text-muted-foreground">
-                ME-DMZ × MovieLabs OMC
+                MovieLabs x Microsoft
               </p>
             </div>
           </div>
@@ -60,7 +60,7 @@ export function Login() {
               <Bot className="h-8 w-8 text-fx-light-blue" />
             </div>
             <CardTitle className="text-2xl font-bold text-foreground">
-              Welcome to Truth Engine
+              Welcome to HPA 2026 OMC Agent
             </CardTitle>
             <CardDescription className="text-muted-foreground">
               AI-powered assistant for MovieLabs OMC ontology and ME-NEXUS data platform
@@ -115,7 +115,7 @@ export function Login() {
             </Button>
 
             <p className="text-center text-xs text-muted-foreground">
-              By signing in, you agree to access the Truth Engine demonstration
+              By signing in, you agree to access the HPA 2026 OMC Agent demonstration
             </p>
           </CardContent>
         </Card>
