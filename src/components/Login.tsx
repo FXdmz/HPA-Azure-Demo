@@ -2,7 +2,8 @@ import { useMsal } from "@azure/msal-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { loginRequest } from "@/config/auth";
-import { LogIn, Bot, FileText, Shield } from "lucide-react";
+import { LogIn, FileText, Shield } from "lucide-react";
+import greenlightLogo from "@assets/greenlight_logo_1767803838031.png";
 
 export function Login() {
   const { instance } = useMsal();
@@ -56,8 +57,8 @@ export function Login() {
       <main className="flex-1 flex items-center justify-center p-4">
         <Card className="w-full max-w-md bg-card border-border">
           <CardHeader className="text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-fx-dark-blue">
-              <Bot className="h-8 w-8 text-fx-light-blue" />
+            <div className="mx-auto mb-4">
+              <img src={greenlightLogo} alt="Greenlight Logo" className="h-16 w-16" />
             </div>
             <CardTitle className="text-2xl font-bold text-foreground">
               Welcome to HPA 2026 OMC Agent

@@ -10,13 +10,13 @@ import { ChatInput } from "@/components/ChatInput";
 import { AgentService } from "@/services/agentService";
 import { agentTokenRequest, agentConfig } from "@/config/auth";
 import { 
-  Bot, 
   RotateCcw, 
   Settings, 
   Zap, 
   FileText,
   AlertCircle
 } from "lucide-react";
+import greenlightLogo from "@assets/greenlight_logo_1767803838031.png";
 
 interface Message {
   id: string;
@@ -135,9 +135,7 @@ export function ChatInterface() {
       <CardHeader className="flex-shrink-0 border-b border-border pb-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-fx-dark-blue text-fx-light-blue border border-fx-light-blue/20">
-              <Bot className="h-5 w-5" />
-            </div>
+            <img src={greenlightLogo} alt="Greenlight Logo" className="h-10 w-10" />
             <div>
               <CardTitle className="text-lg font-semibold text-foreground flex items-center gap-2">
                 HPA 2026 OMC Agent
@@ -190,8 +188,8 @@ export function ChatInterface() {
           >
             {messages.length === 0 && !isLoading && (
               <div className="flex flex-col items-center justify-center h-full py-12 text-center">
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-fx-dark-blue/50 mb-4">
-                  <Bot className="h-8 w-8 text-fx-light-blue" />
+                <div className="mb-4">
+                  <img src={greenlightLogo} alt="Greenlight Logo" className="h-16 w-16" />
                 </div>
                 <h3 className="text-lg font-semibold text-foreground mb-2">
                   Welcome to HPA 2026 OMC Agent
