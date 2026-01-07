@@ -5,6 +5,7 @@ import { loginRequest } from "@/config/auth";
 import { LogIn, FileText, Shield } from "lucide-react";
 import greenlightLogo from "@assets/greenlight_logo_1767803838031.png";
 import movieLabsLogo from "@assets/2030_vision_logo_r-w_1767803990818.png";
+import { ThemeToggle } from "./ThemeToggle";
 
 export function Login() {
   const { instance } = useMsal();
@@ -19,7 +20,7 @@ export function Login() {
     <div className="min-h-screen bg-background flex flex-col">
       {/* Header */}
       <header className="border-b border-border bg-card/80 backdrop-blur-sm">
-        <div className="container mx-auto px-4 py-3">
+        <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <img src={movieLabsLogo} alt="MovieLabs Logo" className="h-16 w-16" />
             <div>
@@ -31,6 +32,7 @@ export function Login() {
               </p>
             </div>
           </div>
+          <ThemeToggle />
         </div>
       </header>
 
