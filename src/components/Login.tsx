@@ -101,7 +101,7 @@ export function Login() {
               size="lg"
             >
               <LogIn className="mr-2 h-4 w-4" />
-              Sign in with Microsoft
+              Sign in with Microsoft Entra ID
             </Button>
 
             <p className="text-center text-xs text-muted-foreground">
