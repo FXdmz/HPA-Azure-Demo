@@ -1,6 +1,5 @@
 import { useState, useEffect, useRef } from "react";
 import { useMsal, useAccount } from "@azure/msal-react";
-import { InteractionRequiredAuthError } from "@azure/msal-browser";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -8,7 +7,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { ChatMessage } from "@/components/ChatMessage";
 import { ChatInput } from "@/components/ChatInput";
 import { AgentService } from "@/services/agentService";
-import { agentTokenRequest, agentConfig } from "@/config/auth";
 import { 
   RotateCcw, 
   Settings, 
@@ -27,7 +25,7 @@ interface Message {
 }
 
 export function ChatInterface() {
-  const { instance, accounts } = useMsal();
+  const { accounts } = useMsal();
   const account = useAccount(accounts[0] || {});
   
   const [messages, setMessages] = useState<Message[]>([]);
@@ -41,28 +39,11 @@ export function ChatInterface() {
   // Initialize agent service
   useEffect(() => {
     if (account && !agentServiceRef.current) {
-      const getAccessToken = async (): Promise<string> => {
-        try {
-          const response = await instance.acquireTokenSilent({
-            ...agentTokenRequest,
-            account: account,
-          });
-          return response.accessToken;
-        } catch (error) {
-          if (error instanceof InteractionRequiredAuthError) {
-            const response = await instance.acquireTokenPopup(agentTokenRequest);
-            return response.accessToken;
-          }
-          throw error;
-        }
-      };
-
-      agentServiceRef.current = new AgentService(getAccessToken);
+      agentServiceRef.current = new AgentService();
       
-      // Initialize the service
       agentServiceRef.current.initialize()
-        .then(() => {
-          setIsInitialized(true);
+        .then((result) => {
+          setIsInitialized(result.status === 'ready');
           setError(null);
         })
         .catch((err) => {
@@ -70,7 +51,7 @@ export function ChatInterface() {
           setError("Failed to connect to HPA 2026 OMC Agent");
         });
     }
-  }, [account, instance]);
+  }, [account]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -101,7 +82,7 @@ export function ChatInterface() {
         role: "assistant",
         content: response.content,
         sources: response.sources,
-        timestamp: response.createdAt,
+        timestamp: Date.now(),
       };
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (err) {
@@ -147,7 +128,7 @@ export function ChatInterface() {
                 )}
               </CardTitle>
               <p className="text-sm text-muted-foreground">
-                Agent: {agentConfig.agentName}
+                Agent: aescher2
               </p>
             </div>
           </div>

@@ -6,13 +6,22 @@ modules = ["nodejs-20"]
 channel = "stable-24_05"
 
 [deployment]
-deploymentTarget = "static"
+deploymentTarget = "autoscale"
 publicDir = "dist"
-build = ["sh", "-c", "npm run build"]
+build = ["sh", "-c", "npm run build && cd backend && npm install"]
+run = ["sh", "-c", "cd backend && npm start & npx serve -s dist -l 5000"]
+
+[[ports]]
+localPort = 3001
+externalPort = 3001
 
 [[ports]]
 localPort = 5000
 externalPort = 80
+
+[[ports]]
+localPort = 5001
+externalPort = 3001
 
 [agent]
 expertMode = true
@@ -29,6 +38,10 @@ author = "agent"
 task = "workflow.run"
 args = "Start application"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Backend Server"
+
 [[workflows.workflow]]
 name = "Start application"
 author = "agent"
@@ -40,3 +53,15 @@ outputType = "webview"
 task = "shell.exec"
 args = "npm run dev"
 waitForPort = 5000
+
+[[workflows.workflow]]
+name = "Backend Server"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd backend && npm start"
+waitForPort = 3001
+
+[workflows.workflow.metadata]
+outputType = "console"

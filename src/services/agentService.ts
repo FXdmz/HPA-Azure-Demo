@@ -1,147 +1,61 @@
-import { agentConfig } from "@/config/auth";
-
-interface Message {
-  role: "user" | "assistant";
-  content: string;
-}
-
 interface AgentResponse {
   id: string;
   content: string;
   sources: string[];
-  toolCalls?: ToolCall[];
-  createdAt: number;
-}
-
-interface ToolCall {
-  type: string;
-  name: string;
-  result?: unknown;
+  threadId?: string;
 }
 
 export class AgentService {
-  private getAccessToken: () => Promise<string>;
-  private conversationHistory: Message[] = [];
-  
-  constructor(getAccessToken: () => Promise<string>) {
-    this.getAccessToken = getAccessToken;
-  }
+  private backendUrl: string;
+  private sessionId: string;
 
-  private async getHeaders(): Promise<Record<string, string>> {
-    const token = await this.getAccessToken();
-    return {
-      "Authorization": `Bearer ${token}`,
-      "Content-Type": "application/json",
-    };
+  constructor() {
+    this.backendUrl = window.location.origin.replace(':5000', ':3001');
+    if (!this.backendUrl.includes('localhost') && !this.backendUrl.includes(':3001')) {
+      this.backendUrl = '';
+    }
+    this.sessionId = `session-${Date.now()}`;
   }
 
   async initialize(): Promise<{ agentId: string; status: string }> {
-    await this.getAccessToken();
-    return { agentId: agentConfig.agentName, status: "ready" };
+    try {
+      const response = await fetch(`${this.backendUrl}/api/health`);
+      const data = await response.json();
+      return { agentId: data.agent, status: 'ready' };
+    } catch (error) {
+      console.error('Backend health check failed:', error);
+      return { agentId: 'unknown', status: 'error' };
+    }
   }
 
   async sendMessage(content: string): Promise<AgentResponse> {
-    const headers = await this.getHeaders();
-    
-    this.conversationHistory.push({ role: "user", content });
-    
-    const messages = this.conversationHistory.map(msg => ({
-      role: msg.role,
-      content: msg.content,
-    }));
-
-    const url = `${agentConfig.endpoint}/openai/responses?api-version=${agentConfig.apiVersion}`;
-    
-    console.log("Sending message via Responses API:", url);
-    console.log("Agent name:", agentConfig.agentName);
-    
-    const requestBody = {
-      input: messages,
-      agent: {
-        name: agentConfig.agentName,
-        type: "agent_reference",
-      },
-    };
-    
-    console.log("Request body:", JSON.stringify(requestBody, null, 2));
-
-    const response = await fetch(url, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(requestBody),
+    const response = await fetch(`${this.backendUrl}/api/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        message: content,
+        sessionId: this.sessionId
+      })
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      console.error("Responses API error:", errorText);
-      this.conversationHistory.pop();
-      throw new Error(`Failed to get response: ${response.status} - ${errorText}`);
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to get response');
     }
 
-    const data = await response.json();
-    console.log("Response data:", JSON.stringify(data, null, 2));
-
-    let responseContent = "No response";
-    const sources: string[] = [];
-    const toolCalls: ToolCall[] = [];
-
-    if (data.output_text) {
-      responseContent = data.output_text;
-    } else if (data.output) {
-      for (const item of data.output) {
-        if (item.type === "message" && item.content) {
-          for (const contentItem of item.content) {
-            if (contentItem.type === "text") {
-              responseContent = contentItem.text;
-            }
-            if (contentItem.annotations) {
-              for (const annotation of contentItem.annotations) {
-                if (annotation.type === "file_citation") {
-                  sources.push("MovieLabs OMC");
-                }
-              }
-            }
-          }
-        }
-        if (item.type === "function_call" || item.type === "tool_use") {
-          toolCalls.push({
-            type: item.type,
-            name: item.name || item.function?.name || "unknown",
-            result: item.output || item.result,
-          });
-          if (item.name === "getfactcard" || item.function?.name === "getfactcard") {
-            sources.push("ME-NEXUS");
-          }
-        }
-        if (item.type === "file_search_call") {
-          sources.push("MovieLabs OMC");
-          toolCalls.push({
-            type: "file_search",
-            name: "file_search",
-            result: item.results,
-          });
-        }
-      }
-    } else if (data.choices?.[0]?.message?.content) {
-      responseContent = data.choices[0].message.content;
-    }
-
-    this.conversationHistory.push({ role: "assistant", content: responseContent });
-
-    return {
-      id: data.id || `msg-${Date.now()}`,
-      content: responseContent,
-      sources: [...new Set(sources)],
-      toolCalls,
-      createdAt: Date.now(),
-    };
+    return response.json();
   }
 
   clearHistory(): void {
-    this.conversationHistory = [];
+    fetch(`${this.backendUrl}/api/clear`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId: this.sessionId })
+    });
+    this.sessionId = `session-${Date.now()}`;
   }
 
-  getHistory(): Message[] {
-    return [...this.conversationHistory];
+  getHistory(): Array<{ role: string; content: string }> {
+    return [];
   }
 }
