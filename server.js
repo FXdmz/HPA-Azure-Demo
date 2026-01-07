@@ -1,12 +1,15 @@
 import express from 'express';
-import cors from 'cors';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import { ClientSecretCredential } from '@azure/identity';
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
 const app = express();
-app.use(cors());
 app.use(express.json());
 
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 
 const credential = new ClientSecretCredential(
   process.env.AZURE_TENANT_ID,
@@ -20,14 +23,14 @@ const API_VERSION = "2024-12-01-preview";
 
 const sessions = new Map();
 
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', agent: AGENT_NAME });
-});
-
 async function getAccessToken() {
   const tokenResponse = await credential.getToken("https://cognitiveservices.azure.com/.default");
   return tokenResponse.token;
 }
+
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', agent: AGENT_NAME });
+});
 
 app.post('/api/chat', async (req, res) => {
   try {
@@ -177,8 +180,14 @@ app.post('/api/clear', (req, res) => {
   res.json({ status: 'cleared' });
 });
 
-app.listen(PORT, () => {
-  console.log(`Backend server running on port ${PORT}`);
+app.use(express.static(join(__dirname, 'dist')));
+
+app.get('*', (req, res) => {
+  res.sendFile(join(__dirname, 'dist', 'index.html'));
+});
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on port ${PORT}`);
   console.log(`Agent: ${AGENT_NAME}`);
   console.log(`Endpoint: ${ENDPOINT}`);
 });

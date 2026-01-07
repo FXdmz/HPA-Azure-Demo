@@ -6,30 +6,25 @@ interface AgentResponse {
 }
 
 export class AgentService {
-  private backendUrl: string;
   private sessionId: string;
 
   constructor() {
-    this.backendUrl = window.location.origin.replace(':5000', ':3001');
-    if (!this.backendUrl.includes('localhost') && !this.backendUrl.includes(':3001')) {
-      this.backendUrl = '';
-    }
     this.sessionId = `session-${Date.now()}`;
   }
 
   async initialize(): Promise<{ agentId: string; status: string }> {
     try {
-      const response = await fetch(`${this.backendUrl}/api/health`);
+      const response = await fetch('/api/health');
       const data = await response.json();
       return { agentId: data.agent, status: 'ready' };
     } catch (error) {
-      console.error('Backend health check failed:', error);
+      console.error('Health check failed:', error);
       return { agentId: 'unknown', status: 'error' };
     }
   }
 
   async sendMessage(content: string): Promise<AgentResponse> {
-    const response = await fetch(`${this.backendUrl}/api/chat`, {
+    const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -47,7 +42,7 @@ export class AgentService {
   }
 
   clearHistory(): void {
-    fetch(`${this.backendUrl}/api/clear`, {
+    fetch('/api/clear', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionId: this.sessionId })
