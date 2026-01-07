@@ -2,7 +2,7 @@ import { useMsal } from "@azure/msal-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { loginRequest } from "@/config/auth";
-import { LogIn, Bot, Database, FileText, Shield } from "lucide-react";
+import { LogIn, Bot, FileText, Shield } from "lucide-react";
 
 export function Login() {
   const { instance } = useMsal();
@@ -63,7 +63,7 @@ export function Login() {
               Welcome to HPA 2026 OMC Agent
             </CardTitle>
             <CardDescription className="text-muted-foreground">
-              AI-powered assistant for MovieLabs OMC ontology and ME-NEXUS data platform
+              AI-powered assistant for MovieLabs OMC ontology
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -77,17 +77,6 @@ export function Login() {
                   <p className="text-sm font-medium text-foreground">MovieLabs OMC Knowledge</p>
                   <p className="text-xs text-muted-foreground">
                     Query the complete OMC ontology for media production
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start gap-3">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-fx-dark-blue/20">
-                  <Database className="h-4 w-4 text-fx-light-blue" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-foreground">ME-NEXUS Data</p>
-                  <p className="text-xs text-muted-foreground">
-                    Search 100,000+ entertainment organizations
                   </p>
                 </div>
               </div>

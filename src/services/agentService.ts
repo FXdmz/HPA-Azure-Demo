@@ -200,9 +200,6 @@ export class AgentService {
 
     // Check run steps for tool usage
     const toolCalls = await this.getToolCalls(runData.id);
-    if (toolCalls.some(tc => tc.name?.includes("getfactcard"))) {
-      sources.push("ME-NEXUS");
-    }
 
     return {
       id: latestMessage.id || `msg-${Date.now()}`,

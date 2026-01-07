@@ -14,7 +14,6 @@ import {
   RotateCcw, 
   Settings, 
   Zap, 
-  Database, 
   FileText,
   AlertCircle
 } from "lucide-react";
@@ -179,10 +178,6 @@ export function ChatInterface() {
             <FileText className="h-3 w-3" />
             MovieLabs OMC
           </Badge>
-          <Badge variant="secondary" className="gap-1">
-            <Database className="h-3 w-3" />
-            ME-NEXUS
-          </Badge>
         </div>
       </CardHeader>
 
@@ -202,9 +197,8 @@ export function ChatInterface() {
                   Welcome to HPA 2026 OMC Agent
                 </h3>
                 <p className="text-sm text-muted-foreground max-w-md">
-                  Ask questions about MovieLabs OMC ontology or query the ME-NEXUS
-                  data platform. I can help you understand media production concepts
-                  and find information about VFX vendors, studios, and more.
+                  Ask questions about MovieLabs OMC ontology. I can help you understand 
+                  media production concepts and workflows.
                 </p>
                 <div className="mt-6 flex flex-wrap gap-2 justify-center">
                   <Button

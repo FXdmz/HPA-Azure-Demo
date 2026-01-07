@@ -1,6 +1,6 @@
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { Bot, User, Database, FileText } from "lucide-react";
+import { Bot, User, FileText } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 interface ChatMessageProps {
@@ -82,11 +82,7 @@ export function ChatMessage({
                 variant="outline" 
                 className="text-xs gap-1 bg-card/50"
               >
-                {source === "ME-NEXUS" ? (
-                  <Database className="h-3 w-3" />
-                ) : (
-                  <FileText className="h-3 w-3" />
-                )}
+                <FileText className="h-3 w-3" />
                 {source}
               </Badge>
             ))}

@@ -12,7 +12,7 @@ interface ChatInputProps {
 export function ChatInput({ 
   onSend, 
   disabled = false, 
-  placeholder = "Ask about MovieLabs OMC or search ME-NEXUS data..." 
+  placeholder = "Ask about MovieLabs OMC..." 
 }: ChatInputProps) {
   const [message, setMessage] = useState("");
 
