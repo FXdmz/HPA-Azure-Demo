@@ -42,7 +42,7 @@ export const loginRequest: PopupRequest = {
 
 // Scopes for calling Azure AI Foundry / Cognitive Services API
 export const agentTokenRequest = {
-  scopes: ["https://cognitiveservices.azure.com/.default"],
+  scopes: ["https://ai.azure.com/.default"],
 };
 
 // Agent configuration - aescheraicanadaeast project with aescher2 agent
