@@ -63,7 +63,7 @@ export class AgentService {
     const data = await response.json();
     this.threadId = data.id;
     console.log("Thread created:", this.threadId);
-    return this.threadId;
+    return this.threadId as string;
   }
 
   async sendMessage(content: string): Promise<AgentResponse> {
