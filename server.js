@@ -27,7 +27,7 @@ const credential = new ClientSecretCredential(
 
 const ENDPOINT = process.env.AI_FOUNDRY_ENDPOINT;
 const AGENT_NAME = process.env.AI_AGENT_NAME;
-const API_VERSION = "2024-12-01-preview";
+const API_VERSION = "2025-05-01";
 const TOKEN_SCOPE = "https://ai.azure.com/.default";
 
 const sessions = new Map();
