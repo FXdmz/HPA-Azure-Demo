@@ -1,0 +1,168 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* ME-DMZ Light Theme */
+    --background: 0 0% 98%;
+    --foreground: 243 56% 29%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 243 56% 29%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 243 56% 29%;
+
+    --primary: 243 56% 29%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 189 46% 87%;
+    --secondary-foreground: 243 56% 29%;
+
+    --muted: 220 9% 46%;
+    --muted-foreground: 220 9% 40%;
+
+    --accent: 189 46% 87%;
+    --accent-foreground: 243 56% 29%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 220 13% 91%;
+    --input: 220 13% 91%;
+    --ring: 243 56% 29%;
+
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    /* ME-DMZ Dark Theme */
+    --background: 243 76% 8%;
+    --foreground: 189 46% 87%;
+
+    --card: 243 68% 14%;
+    --card-foreground: 189 46% 87%;
+
+    --popover: 243 68% 14%;
+    --popover-foreground: 189 46% 87%;
+
+    --primary: 189 46% 87%;
+    --primary-foreground: 243 56% 29%;
+
+    --secondary: 243 56% 29%;
+    --secondary-foreground: 189 46% 87%;
+
+    --muted: 240 4% 46%;
+    --muted-foreground: 0 0% 65%;
+
+    --accent: 243 30% 25%;
+    --accent-foreground: 189 46% 87%;
+
+    --destructive: 0 63% 31%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 243 30% 20%;
+    --input: 243 30% 20%;
+    --ring: 189 46% 87%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'azo-sans', system-ui, sans-serif;
+  }
+  
+  h1 {
+    @apply text-4xl font-bold tracking-tight text-primary;
+  }
+  h2 {
+    @apply text-3xl font-bold tracking-tight text-primary;
+  }
+  h3 {
+    @apply text-xl font-bold text-primary;
+  }
+}
+
+@layer utilities {
+  .text-brand {
+    @apply text-fx-dark-blue dark:text-fx-light-blue;
+  }
+  .bg-brand {
+    @apply bg-fx-light-blue dark:bg-fx-dark-blue;
+  }
+  
+  .bg-brand-pattern {
+    background-color: hsl(243, 56%, 29%);
+    background-image: url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M30 0L60 17.32v34.64L30 60 0 52V17.32L30 0zm0 5.77L5.77 20.19v19.62L30 54.23l24.23-14.42V20.19L30 5.77z' fill='%23ffffff' fill-opacity='0.08' fill-rule='evenodd'/%3E%3C/svg%3E");
+  }
+
+  /* Scrollbar styling */
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted)) transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background-color: hsl(var(--muted));
+    border-radius: 3px;
+  }
+}
+
+/* Markdown content styling */
+.markdown-content {
+  @apply leading-relaxed;
+}
+
+.markdown-content p {
+  @apply mb-4;
+}
+
+.markdown-content ul, .markdown-content ol {
+  @apply mb-4 ml-6;
+}
+
+.markdown-content ul {
+  @apply list-disc;
+}
+
+.markdown-content ol {
+  @apply list-decimal;
+}
+
+.markdown-content li {
+  @apply mb-1;
+}
+
+.markdown-content code {
+  @apply bg-muted px-1.5 py-0.5 rounded text-sm font-mono;
+}
+
+.markdown-content pre {
+  @apply bg-muted p-4 rounded-lg overflow-x-auto mb-4;
+}
+
+.markdown-content pre code {
+  @apply bg-transparent p-0;
+}
+
+.markdown-content h1, .markdown-content h2, .markdown-content h3 {
+  @apply mt-6 mb-3;
+}
+
+.markdown-content a {
+  @apply text-fx-light-blue underline hover:no-underline;
+}
