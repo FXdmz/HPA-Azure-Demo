@@ -49,5 +49,5 @@ export const agentTokenRequest = {
 export const agentConfig = {
   endpoint: "https://aescheraicanadaeast-resource.services.ai.azure.com/api/projects/aescheraicanadaeast",
   agentName: "aescher2",
-  apiVersion: "2025-05-01-preview",
+  apiVersion: "2025-05-01",
 };
