@@ -10,44 +10,66 @@ export class AgentService {
 
   constructor() {
     this.sessionId = `session-${Date.now()}`;
+    console.log('[AgentService] Initialized with session:', this.sessionId);
   }
 
   async initialize(): Promise<{ agentId: string; status: string }> {
+    console.log('[AgentService] Checking health...');
     try {
       const response = await fetch('/api/health');
+      console.log('[AgentService] Health response status:', response.status);
       const data = await response.json();
+      console.log('[AgentService] Health data:', data);
       return { agentId: data.agent, status: 'ready' };
     } catch (error) {
-      console.error('Health check failed:', error);
+      console.error('[AgentService] Health check failed:', error);
       return { agentId: 'unknown', status: 'error' };
     }
   }
 
   async sendMessage(content: string): Promise<AgentResponse> {
-    const response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        message: content,
-        sessionId: this.sessionId
-      })
-    });
+    console.log('[AgentService] Sending message:', content);
+    console.log('[AgentService] Session ID:', this.sessionId);
+    
+    const startTime = Date.now();
+    
+    try {
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          message: content,
+          sessionId: this.sessionId
+        })
+      });
 
-    if (!response.ok) {
-      const error = await response.json();
-      throw new Error(error.error || 'Failed to get response');
+      console.log('[AgentService] Response status:', response.status);
+      console.log('[AgentService] Response time:', Date.now() - startTime, 'ms');
+
+      const data = await response.json();
+      console.log('[AgentService] Response data:', data);
+
+      if (!response.ok) {
+        console.error('[AgentService] Error response:', data);
+        throw new Error(data.error || 'Failed to get response');
+      }
+
+      return data;
+    } catch (error) {
+      console.error('[AgentService] Request failed:', error);
+      throw error;
     }
-
-    return response.json();
   }
 
   clearHistory(): void {
+    console.log('[AgentService] Clearing history for session:', this.sessionId);
     fetch('/api/clear', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ sessionId: this.sessionId })
     });
     this.sessionId = `session-${Date.now()}`;
+    console.log('[AgentService] New session:', this.sessionId);
   }
 
   getHistory(): Array<{ role: string; content: string }> {
