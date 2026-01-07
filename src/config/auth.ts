@@ -3,7 +3,7 @@ import { Configuration, LogLevel, PopupRequest } from "@azure/msal-browser";
 // Microsoft Entra ID (Azure AD) configuration for aescher2 app
 export const msalConfig: Configuration = {
   auth: {
-    clientId: "dd098aaf-cc4f-4f12-9d0f-83c5585389bc", // aescher2
+    clientId: "8bf8bcb9-2228-452f-9a1c-3f764f4c34b6", // Aesher-HPA-1-7-25
     authority: "https://login.microsoftonline.com/e97f9fc7-2bba-4957-bf26-f340d78414b7",
     redirectUri: typeof window !== 'undefined' ? window.location.origin : "http://localhost:5173",
   },
@@ -45,9 +45,9 @@ export const agentTokenRequest = {
   scopes: ["https://cognitiveservices.azure.com/.default"],
 };
 
-// Agent configuration - gl-sc3 project with aescher1 agent
+// Agent configuration - aescheraicanadaeast project with aescher2 agent
 export const agentConfig = {
-  endpoint: "https://gl-sc3-resource.services.ai.azure.com/api/projects/gl-sc3",
-  agentName: "aescher1",
+  endpoint: "https://aescheraicanadaeast-resource.services.ai.azure.com/api/projects/aescheraicanadaeast",
+  agentName: "aescher2",
   apiVersion: "2025-05-01-preview",
 };
