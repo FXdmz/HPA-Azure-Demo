@@ -24,7 +24,7 @@ const API_VERSION = "2024-12-01-preview";
 const sessions = new Map();
 
 async function getAccessToken() {
-  const tokenResponse = await credential.getToken("https://ai.azure.com/.default");
+  const tokenResponse = await credential.getToken("https://cognitiveservices.azure.com/.default");
   return tokenResponse.token;
 }
 
