@@ -1,6 +1,7 @@
 import { useMsal, useAccount } from "@azure/msal-react";
 import { Button } from "@/components/ui/button";
 import { LogOut, User } from "lucide-react";
+import movieLabsLogo from "@assets/2030_vision_logo_r-w_1767803990818.png";
 
 export function Header() {
   const { instance, accounts } = useMsal();
@@ -16,28 +17,7 @@ export function Header() {
         {/* Logo & Title */}
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <svg
-              viewBox="0 0 40 40"
-              className="h-8 w-8"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              {/* ME-DMZ Logo - Hexagon with M */}
-              <path
-                d="M20 2L36.66 12v20L20 42 3.34 32V12L20 2z"
-                fill="#232073"
-                stroke="#CEECF2"
-                strokeWidth="2"
-              />
-              <path
-                d="M12 28V14l8 8 8-8v14"
-                stroke="#CEECF2"
-                strokeWidth="3"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                fill="none"
-              />
-            </svg>
+            <img src={movieLabsLogo} alt="MovieLabs Logo" className="h-8 w-8" />
             <div>
               <h1 className="text-lg font-bold text-foreground tracking-tight">
                 HPA 2026 OMC Agent
