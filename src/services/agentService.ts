@@ -11,9 +11,20 @@ interface AgentInfo {
   status: string;
 }
 
+interface AgentDetails {
+  name: string;
+  id: string;
+  model: string;
+  instructions: string;
+  tools: string[];
+  vectorStoreIds: string[];
+  createdAt: string | null;
+}
+
 export class AgentService {
   private sessionId: string;
   private agentInfo: AgentInfo | null = null;
+  private agentDetails: AgentDetails | null = null;
 
   constructor() {
     this.sessionId = `session-${Date.now()}`;
@@ -42,8 +53,39 @@ export class AgentService {
     }
   }
 
+  async fetchAgentDetails(): Promise<AgentDetails | null> {
+    console.log('[AgentService] Fetching agent details...');
+    try {
+      const response = await fetch('/api/agent');
+      if (!response.ok) {
+        throw new Error('Failed to fetch agent details');
+      }
+      const data = await response.json();
+      console.log('[AgentService] Agent details:', data);
+      
+      this.agentDetails = {
+        name: data.name || 'Unknown',
+        id: data.id || 'Unknown',
+        model: data.model || 'Unknown',
+        instructions: data.instructions || '',
+        tools: data.tools || [],
+        vectorStoreIds: data.vectorStoreIds || [],
+        createdAt: data.createdAt || null
+      };
+      
+      return this.agentDetails;
+    } catch (error) {
+      console.error('[AgentService] Failed to fetch agent details:', error);
+      return null;
+    }
+  }
+
   getAgentInfo(): AgentInfo | null {
     return this.agentInfo;
+  }
+
+  getAgentDetails(): AgentDetails | null {
+    return this.agentDetails;
   }
 
   async sendMessage(content: string): Promise<AgentResponse> {

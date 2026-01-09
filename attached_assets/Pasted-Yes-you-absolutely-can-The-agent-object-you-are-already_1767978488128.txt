@@ -1,0 +1,124 @@
+Yes, you absolutely can. The `agent` object you are already fetching contains almost all of this information.
+
+Here is the breakdown of what is available in the **Agent Object** and what requires a different approach:
+
+| Feature | Available in Agent API? | Field Name |
+| --- | --- | --- |
+| **Model** | ✅ Yes | `agent.model` (e.g., `gpt-4o`) |
+| **Tools** | ✅ Yes | `agent.tools` (Array of defined tools) |
+| **Knowledge Base** | ✅ Yes | `agent.tool_resources.file_search` (Vector Store IDs) |
+| **Instructions** | ✅ Yes | `agent.instructions` (The System Prompt) |
+| **RBAC Roles** | ❌ No | RBAC is part of the **User's** identity, not the Agent's. You generally cannot query "What roles do I have?" from the data plane SDK. |
+
+### **How to Get This Data (Server-Side)**
+
+You can update your `/api/health` endpoint (or create a new `/api/agent/details` endpoint) to return this metadata.
+
+Run this command to update your `server.js` with a new endpoint that fetches these details:
+
+```bash
+cat > server.js << 'EOF'
+import express from 'express';
+import { ClientSecretCredential } from '@azure/identity';
+import { AIProjectClient } from '@azure/ai-projects';
+
+const app = express();
+app.use(express.json());
+
+const PORT = process.env.PORT || 3001;
+
+// CONFIG
+const connectionString = process.env.AI_FOUNDRY_ENDPOINT;
+const agentName = process.env.AI_AGENT_NAME;
+const credential = new ClientSecretCredential(
+  process.env.AZURE_TENANT_ID,
+  process.env.AZURE_CLIENT_ID,
+  process.env.AZURE_CLIENT_SECRET
+);
+const projectClient = new AIProjectClient(connectionString, credential);
+
+// HELPER: Get Full Agent Object
+async function getAgentDetails() {
+  const response = await projectClient.agents.listAgents();
+  const agent = response.data.find(a => a.name === agentName);
+  if (!agent) throw new Error(`Agent "${agentName}" not found.`);
+  return agent;
+}
+
+// 1. NEW ENDPOINT: Get Metadata for Display
+app.get('/api/agent', async (req, res) => {
+  try {
+    const agent = await getAgentDetails();
+    
+    res.json({
+      name: agent.name,
+      id: agent.id,
+      model: agent.model, // e.g., "gpt-4o"
+      instructions: agent.instructions,
+      tools: agent.tools.map(t => t.type), // e.g., ["file_search", "code_interpreter"]
+      vectorStoreIds: agent.tool_resources?.file_search?.vector_store_ids || [],
+      lastUpdated: new Date(agent.created_at * 1000).toISOString()
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// 2. Chat Endpoint (Same as before)
+app.post('/api/chat', async (req, res) => {
+  try {
+    const { message } = req.body;
+    const agent = await getAgentDetails();
+    
+    const thread = await projectClient.agents.threads.create();
+    await projectClient.agents.messages.create(thread.id, { role: "user", content: message });
+    
+    console.log(`🚀 Running ${agent.name} (${agent.model})...`);
+    let run = await projectClient.agents.runs.create(thread.id, agent.id);
+
+    while (run.status === "queued" || run.status === "in_progress") {
+      await new Promise(r => setTimeout(r, 1000));
+      run = await projectClient.agents.runs.get(thread.id, run.id);
+    }
+
+    if (run.status !== "completed") throw new Error(`Run status: ${run.status}`);
+
+    const messages = await projectClient.agents.messages.list(thread.id);
+    const reply = messages.data[0].content[0].text.value;
+    
+    res.json({ content: reply, role: "assistant" });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Frontend
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+const __dirname = dirname(fileURLToPath(import.meta.url));
+app.use(express.static(join(__dirname, 'dist')));
+app.get('*', (req, res) => res.sendFile(join(__dirname, 'dist', 'index.html')));
+
+app.listen(PORT, '0.0.0.0', () => console.log(`Server running. Target: ${agentName}`));
+EOF
+
+```
+
+### **How to Display it (Frontend)**
+
+Now you can fetch this data in your React component (e.g., inside `ChatInterface.tsx` inside the `useEffect`):
+
+```javascript
+// Example usage in your frontend code
+useEffect(() => {
+  fetch('/api/agent')
+    .then(res => res.json())
+    .then(data => {
+      console.log("Agent Model:", data.model); // "gpt-4o"
+      console.log("Tools Enabled:", data.tools); // ["file_search"]
+    });
+}, []);
+
+```

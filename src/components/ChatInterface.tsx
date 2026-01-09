@@ -12,7 +12,10 @@ import {
   Settings, 
   Zap, 
   FileText,
-  AlertCircle
+  AlertCircle,
+  Cpu,
+  Wrench,
+  Database
 } from "lucide-react";
 import greenlightLogo from "@assets/greenlight_logo_1767803838031.png";
 
@@ -34,6 +37,9 @@ export function ChatInterface() {
   const [error, setError] = useState<string | null>(null);
   const [agentName, setAgentName] = useState<string>("Loading...");
   const [agentId, setAgentId] = useState<string>("");
+  const [agentModel, setAgentModel] = useState<string>("");
+  const [agentTools, setAgentTools] = useState<string[]>([]);
+  const [vectorStoreIds, setVectorStoreIds] = useState<string[]>([]);
   
   const agentServiceRef = useRef<AgentService | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -44,11 +50,19 @@ export function ChatInterface() {
       agentServiceRef.current = new AgentService();
       
       agentServiceRef.current.initialize()
-        .then((result) => {
+        .then(async (result) => {
           setIsInitialized(result.status === 'ready');
           setAgentName(result.agentName || 'Unknown');
           setAgentId(result.agentId || '');
           setError(null);
+          
+          // Fetch additional agent details
+          const details = await agentServiceRef.current?.fetchAgentDetails();
+          if (details) {
+            setAgentModel(details.model || '');
+            setAgentTools(details.tools || []);
+            setVectorStoreIds(details.vectorStoreIds || []);
+          }
         })
         .catch((err) => {
           console.error("Failed to initialize agent:", err);
@@ -160,8 +174,26 @@ export function ChatInterface() {
           </div>
         </div>
 
-        {/* Data Sources */}
-        <div className="flex gap-2 mt-3">
+        {/* Agent Metadata */}
+        <div className="flex flex-wrap gap-2 mt-3">
+          {agentModel && (
+            <Badge variant="secondary" className="gap-1">
+              <Cpu className="h-3 w-3" />
+              {agentModel}
+            </Badge>
+          )}
+          {agentTools.map((tool, index) => (
+            <Badge key={index} variant="secondary" className="gap-1">
+              <Wrench className="h-3 w-3" />
+              {tool.replace(/_/g, ' ')}
+            </Badge>
+          ))}
+          {vectorStoreIds.length > 0 && (
+            <Badge variant="secondary" className="gap-1">
+              <Database className="h-3 w-3" />
+              {vectorStoreIds.length} Vector Store{vectorStoreIds.length > 1 ? 's' : ''}
+            </Badge>
+          )}
           <Badge variant="secondary" className="gap-1">
             <FileText className="h-3 w-3" />
             MovieLabs OMC

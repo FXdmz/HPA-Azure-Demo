@@ -54,26 +54,26 @@ async function resolveAgentId(name) {
   return agent.id;
 }
 
+// Helper: Get full agent object
+async function getAgentDetails() {
+  const agents = [];
+  for await (const agent of projectClient.agents.listAgents()) {
+    agents.push(agent);
+  }
+  const agent = agents.find(a => a.name === semanticAgentName || a.id === semanticAgentName);
+  if (!agent) throw new Error(`Agent "${semanticAgentName}" not found.`);
+  return agent;
+}
+
 app.get('/api/health', async (req, res) => {
   try {
-    // Resolve agent ID if not cached
-    let agentId = cachedAgentId;
-    if (!agentId && semanticAgentName) {
-      const agents = [];
-      for await (const agent of projectClient.agents.listAgents()) {
-        agents.push(agent);
-      }
-      const agent = agents.find(a => a.name === semanticAgentName || a.id === semanticAgentName);
-      if (agent) {
-        agentId = agent.id;
-        cachedAgentId = agentId;
-      }
-    }
+    const agent = await getAgentDetails();
+    cachedAgentId = agent.id;
     
     res.json({ 
       status: 'ok', 
-      agentName: semanticAgentName,
-      agentId: agentId || semanticAgentName,
+      agentName: agent.name,
+      agentId: agent.id,
       mode: 'dynamic-resolution' 
     });
   } catch (error) {
@@ -83,6 +83,25 @@ app.get('/api/health', async (req, res) => {
       agentId: cachedAgentId || semanticAgentName,
       mode: 'dynamic-resolution' 
     });
+  }
+});
+
+app.get('/api/agent', async (req, res) => {
+  try {
+    const agent = await getAgentDetails();
+    cachedAgentId = agent.id;
+    
+    res.json({
+      name: agent.name,
+      id: agent.id,
+      model: agent.model,
+      instructions: agent.instructions,
+      tools: agent.tools ? agent.tools.map(t => t.type) : [],
+      vectorStoreIds: agent.toolResources?.fileSearch?.vectorStoreIds || [],
+      createdAt: agent.createdAt ? new Date(agent.createdAt).toISOString() : null
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
