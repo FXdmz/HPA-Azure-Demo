@@ -32,6 +32,8 @@ export function ChatInterface() {
   const [isLoading, setIsLoading] = useState(false);
   const [isInitialized, setIsInitialized] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [agentName, setAgentName] = useState<string>("Loading...");
+  const [agentId, setAgentId] = useState<string>("");
   
   const agentServiceRef = useRef<AgentService | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -44,6 +46,8 @@ export function ChatInterface() {
       agentServiceRef.current.initialize()
         .then((result) => {
           setIsInitialized(result.status === 'ready');
+          setAgentName(result.agentName || 'Unknown');
+          setAgentId(result.agentId || '');
           setError(null);
         })
         .catch((err) => {
@@ -128,8 +132,13 @@ export function ChatInterface() {
                 )}
               </CardTitle>
               <p className="text-sm text-muted-foreground">
-                Agent: aescher2
+                Agent: {agentName}
               </p>
+              {agentId && agentId !== agentName && (
+                <p className="text-xs text-muted-foreground/70 font-mono">
+                  {agentId}
+                </p>
+              )}
             </div>
           </div>
           <div className="flex gap-2">

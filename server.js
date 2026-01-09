@@ -54,8 +54,36 @@ async function resolveAgentId(name) {
   return agent.id;
 }
 
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', agent: semanticAgentName, mode: 'dynamic-resolution' });
+app.get('/api/health', async (req, res) => {
+  try {
+    // Resolve agent ID if not cached
+    let agentId = cachedAgentId;
+    if (!agentId && semanticAgentName) {
+      const agents = [];
+      for await (const agent of projectClient.agents.listAgents()) {
+        agents.push(agent);
+      }
+      const agent = agents.find(a => a.name === semanticAgentName || a.id === semanticAgentName);
+      if (agent) {
+        agentId = agent.id;
+        cachedAgentId = agentId;
+      }
+    }
+    
+    res.json({ 
+      status: 'ok', 
+      agentName: semanticAgentName,
+      agentId: agentId || semanticAgentName,
+      mode: 'dynamic-resolution' 
+    });
+  } catch (error) {
+    res.json({ 
+      status: 'ok', 
+      agentName: semanticAgentName,
+      agentId: cachedAgentId || semanticAgentName,
+      mode: 'dynamic-resolution' 
+    });
+  }
 });
 
 app.post('/api/chat', async (req, res) => {
