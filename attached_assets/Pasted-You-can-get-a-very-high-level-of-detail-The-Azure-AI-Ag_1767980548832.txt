@@ -1,0 +1,135 @@
+You can get a very high level of detail. The Azure AI Agent (and OpenAI) API provides specific timestamps, token usage counts, and detailed execution steps for every run.
+
+Here is exactly where each piece of data comes from and how to get it:
+
+### **Data Source Map**
+
+| Metric | Source Field | How to get it |
+| --- | --- | --- |
+| **Duration (Wall Clock)** | `run.completed_at` - `run.created_at` | Calculate in Node.js (Unix timestamps). |
+| **Compute Time (Active)** | `run.completed_at` - `run.started_at` | Calculate in Node.js (excludes queue time). |
+| **Tokens Used** | `run.usage` | Returns `{ prompt_tokens, completion_tokens, total_tokens }`. |
+| **Tools Used? (Yes/No)** | `run_steps` | You must list the "Run Steps". If any step type is `tool_calls`, the answer is **Yes**. |
+| **Sources** | `message.content.annotations` | Found in the final text response object. |
+
+---
+
+### **The Code Implementation**
+
+You need to update your `server.js` to fetch the **Run Steps** after the run completes. This is the only extra API call required to get the "Tools Used" binary.
+
+Here is the updated route logic for `server.js`:
+
+```javascript
+app.post('/api/chat', async (req, res) => {
+  try {
+    // ... (Your existing setup code) ...
+    
+    // 1. Create Run
+    let run = await projectClient.agents.runs.create(thread.id, agentId);
+
+    // 2. Poll until complete (Your existing loop)
+    while (['queued', 'in_progress', 'requires_action'].includes(run.status)) {
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        run = await projectClient.agents.runs.get(thread.id, run.id);
+        
+        // ... (Your existing tool handling logic) ...
+    }
+
+    if (run.status !== "completed") throw new Error(`Run failed: ${run.status}`);
+
+    // 3. --- NEW: FETCH METADATA ---
+    
+    // A. Get Messages (Content & Sources)
+    const messages = await projectClient.agents.messages.list(thread.id);
+    const lastMsg = messages.data[0];
+    const responseText = lastMsg.content[0].text.value;
+    const annotations = lastMsg.content[0].text.annotations || [];
+    
+    // B. Get Run Steps (To see if tools were used)
+    const stepsResponse = await projectClient.agents.runs.steps.list(thread.id, run.id);
+    const steps = stepsResponse.data;
+    
+    // Logic: Did we use any tool? (Code Interpreter, File Search, or Function)
+    const toolsUsed = steps.some(s => s.type === 'tool_calls');
+    
+    // Logic: Which specific tools? (Optional, if you want names)
+    const toolNames = steps
+        .filter(s => s.type === 'tool_calls')
+        .flatMap(s => s.step_details.tool_calls.map(tc => tc.function?.name || tc.type));
+
+    // C. Calculate Timing
+    const startTime = run.created_at * 1000;
+    const endTime = run.completed_at * 1000;
+    const durationMs = endTime - startTime;
+
+    // 4. Send Rich Response
+    res.json({
+        id: lastMsg.id,
+        content: responseText,
+        role: "assistant",
+        meta: {
+            duration_ms: durationMs,
+            tokens: {
+                total: run.usage.total_tokens,
+                prompt: run.usage.prompt_tokens,
+                completion: run.usage.completion_tokens
+            },
+            tool_used: toolsUsed,       // true/false
+            tool_names: toolNames,      // e.g. ["getFactCard", "file_search"]
+            model: run.model,           // e.g. "gpt-4o"
+            citations: annotations.map(a => a.file_citation || a.file_path) // Raw citation data
+        }
+    });
+
+  } catch (error) {
+    console.error("Chat Error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+```
+
+### **Example JSON Response**
+
+Here is what your frontend will now receive:
+
+```json
+{
+  "id": "msg_123...",
+  "content": "Die Hard is a 1988 movie directed by John McTiernan.",
+  "role": "assistant",
+  "meta": {
+    "duration_ms": 2450,
+    "tokens": {
+      "total": 345,
+      "prompt": 120,
+      "completion": 225
+    },
+    "tool_used": true,
+    "tool_names": ["getFactCard"],
+    "model": "gpt-4o",
+    "citations": []
+  }
+}
+
+```
+
+### **How to Display it (Frontend)**
+
+In your `ChatInterface.tsx` (or `ChatMessage.tsx`), you can now access these fields to render a detailed footer:
+
+```tsx
+// Inside your Message Component
+{message.meta && (
+  <div className="text-xs text-muted-foreground mt-2 border-t pt-2 flex gap-4">
+    <span>⏱️ {(message.meta.duration_ms / 1000).toFixed(2)}s</span>
+    <span>🪙 {message.meta.tokens.total} tokens</span>
+    <span>
+      🛠️ Used Tools: {message.meta.tool_used ? "Yes" : "No"} 
+      {message.meta.tool_used && ` (${message.meta.tool_names.join(', ')})`}
+    </span>
+  </div>
+)}
+
+```

@@ -1,0 +1,105 @@
+Yes, you can absolutely get information about the security and guardrails. In the Azure AI ecosystem, this is primarily handled by **Azure AI Content Safety**.
+
+When you run an Agent, the "Guardrails" work in two layers:
+
+1. **Input/Output Filtering:** Azure automatically scans for Hate, Self-Harm, Sexual, and Violence.
+2. **Run Status:** If a guardrail is triggered, the `Run` object will fail or complete with a specific "incomplete" status, telling you exactly why it stopped.
+
+Here is how to extract and display that data.
+
+### **1. The Data: What you can get**
+
+You can extract these specific signals from the API response to display to your user:
+
+* **Safety Status:** Did the response pass the safety checks? (Pass/Fail)
+* **Failure Reason:** If it failed, was it due to `content_filter`?
+* **Run Failure Code:** `run.last_error` will contain the specific error code (e.g., `server_error`, `rate_limit_exceeded`, or `content_filter`).
+* **Incomplete Details:** If the response was cut off mid-sentence due to a violation, `run.incomplete_details` tells you why.
+
+### **2. The Code: Update `server.js**`
+
+You need to update your polling logic to catch "failed" or "incomplete" states specifically caused by safety filters.
+
+**Update the `app.post('/api/chat')` block in `server.js`:**
+
+```javascript
+// ... inside the polling loop ...
+while (['queued', 'in_progress', 'requires_action'].includes(run.status)) {
+    await new Promise(r => setTimeout(r, 1000));
+    run = await projectClient.agents.runs.get(thread.id, run.id);
+    // ... (handle tool calls here) ...
+}
+
+// --- NEW: HANDLE SAFETY FAILURES ---
+
+let safetyStatus = "passed";
+let failureReason = null;
+
+// Case 1: The Run Failed Completely (e.g. Jailbreak attempt)
+if (run.status === "failed") {
+    if (run.last_error?.code === "content_filter") {
+        safetyStatus = "blocked";
+        failureReason = "Content Filter Triggered (High Severity)";
+        // You might want to return a safe "I cannot answer that" message here
+        return res.json({ 
+            content: "⚠️ The response was blocked by safety filters.", 
+            role: "assistant",
+            meta: { safety_status: "blocked", error: run.last_error }
+        });
+    } else {
+        throw new Error(`Run failed: ${run.last_error?.message}`);
+    }
+}
+
+// Case 2: The Run was Cut Off (e.g. output started getting bad)
+if (run.status === "incomplete" && run.incomplete_details?.reason === "content_filter") {
+    safetyStatus = "truncated";
+    failureReason = "Response truncated due to safety violation";
+}
+
+// ... (Get messages as before) ...
+
+// Add this to your response metadata
+res.json({
+    id: lastMsg.id,
+    content: responseText,
+    role: "assistant",
+    meta: {
+        // ... other meta ...
+        safety: {
+            status: safetyStatus,   // "passed", "blocked", "truncated"
+            violation: failureReason // null or description
+        }
+    }
+});
+
+```
+
+### **3. The Frontend Display**
+
+In your UI, you can now add a "Safety Badge" to the message footer.
+
+**Example Logic in `ChatInterface.tsx`:**
+
+```tsx
+{message.meta?.safety?.status === "passed" && (
+  <span className="text-green-600 text-xs">🛡️ Safety Checks: Passed</span>
+)}
+
+{message.meta?.safety?.status === "blocked" && (
+  <span className="text-red-600 text-xs font-bold">
+    ⛔ Blocked: {message.meta.safety.violation}
+  </span>
+)}
+
+```
+
+### **Summary of Azure Guardrails**
+
+You are benefiting from three distinct layers of protection:
+
+1. **Prompt Shields (Jailbreak Detection):** Detects if a user tries to "hack" the instructions (e.g., "Ignore previous instructions"). If this triggers, the Run fails immediately.
+2. **Content Filters:** Scans both the **User Input** and **Model Output** for harmful categories.
+3. **System Instructions (Your Prompt):** The "soft" guardrails you wrote (e.g., "Do not hallucinate," "Only use provided tools").
+
+By checking `run.last_error` and `run.incomplete_details`, you make these invisible protections visible to your users.
