@@ -12,110 +12,99 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3001;
 
-// --- CONFIGURATION ---
-const connectionString = process.env.AI_FOUNDRY_ENDPOINT;
-const targetAgentName = process.env.AI_AGENT_NAME; // "aescher2"
-const tenantId = process.env.AZURE_TENANT_ID;
-const clientId = process.env.AZURE_CLIENT_ID;
-const clientSecret = process.env.AZURE_CLIENT_SECRET;
+// --- 1. NEW WAY CONFIGURATION ---
+// We connect to the PROJECT (Management Plane), not the Resource
+const connectionString = process.env.AI_FOUNDRY_ENDPOINT; 
+const semanticAgentName = process.env.AI_AGENT_NAME; // "aescher2"
 
-if (!connectionString || !targetAgentName || !clientId || !clientSecret) {
-  console.error("MISSING SECRETS: Check AI_FOUNDRY_ENDPOINT, AI_AGENT_NAME, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET");
-  process.exit(1);
-}
+const credential = new ClientSecretCredential(
+  process.env.AZURE_TENANT_ID,
+  process.env.AZURE_CLIENT_ID,
+  process.env.AZURE_CLIENT_SECRET
+);
 
-// --- AUTHENTICATION ---
-const credential = new ClientSecretCredential(tenantId, clientId, clientSecret);
+// Initialize the Project Client (The Control Plane)
 const projectClient = new AIProjectClient(connectionString, credential);
 
-// --- STATE MANAGEMENT ---
 const sessions = new Map();
 let cachedAgentId = null;
 
-// --- HELPER: The "Registry Pattern" (Name -> ID) ---
-async function getAgentIdByName(name) {
-  // If it already starts with asst_, it's an ID, use directly
+// --- 2. THE REGISTRY PATTERN (Resolve Name -> ID) ---
+// As described in "Architectural Evolution": This resolves the semantic name 
+// to the runtime ID dynamically.
+async function resolveAgentId(name) {
+  // If already an ID, use directly
   if (name && name.startsWith('asst_')) {
     cachedAgentId = name;
     return name;
   }
   
-  // If we already found it, don't look again
   if (cachedAgentId) return cachedAgentId;
 
-  console.log(`[System] Connecting to Azure to find agent named: "${name}"...`);
+  console.log(`[Registry] Resolving semantic name "${name}"...`);
   
-  try {
-    // Get list of all agents in the project
-    const agents = [];
-    for await (const agent of projectClient.agents.listAgents()) {
-      agents.push(agent);
-    }
-    
-    // Find the one that matches our name
-    const agent = agents.find(a => a.name === name);
-
-    if (!agent) {
-      console.error("[Error] Agent NOT found. Available agents are:");
-      agents.forEach(a => console.log(`   - Name: ${a.name} (ID: ${a.id})`));
-      throw new Error(`Agent '${name}' not found in project.`);
-    }
-
-    console.log(`[Success] Found "${agent.name}" -> ID: ${agent.id}`);
-    cachedAgentId = agent.id;
-    return agent.id;
-  } catch (err) {
-    console.error("[Error] Failed to list agents:", err.message);
-    throw err;
+  // Fetch all agents in the Project Scope
+  const agents = [];
+  for await (const agent of projectClient.agents.listAgents()) {
+    agents.push(agent);
   }
+  
+  // Match by Name (Semantic Identity)
+  const agent = agents.find(a => a.name === name);
+
+  if (!agent) {
+    throw new Error(`Agent "${name}" not found in Project. Available agents: ${agents.map(a => a.name).join(", ")}`);
+  }
+
+  console.log(`[Registry] Resolved "${name}" -> ${agent.id}`);
+  cachedAgentId = agent.id;
+  return agent.id;
 }
 
-// --- API ROUTES ---
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', agent: targetAgentName, mode: 'name-resolution' });
+  res.json({ status: 'ok', agent: semanticAgentName, mode: 'dynamic-resolution' });
 });
 
 app.post('/api/chat', async (req, res) => {
   try {
     const { message, sessionId = 'default' } = req.body;
-    if (!message) return res.status(400).json({ error: 'Message is required' });
 
-    // 1. RESOLVE NAME TO ID
-    const agentId = await getAgentIdByName(targetAgentName);
+    // A. RESOLVE IDENTITY
+    // We do not use hardcoded IDs. We resolve at runtime.
+    const agentId = await resolveAgentId(semanticAgentName);
 
-    // 2. MANAGE THREAD
+    // B. MANAGE STATE (Thread)
     let threadId = sessions.get(sessionId);
     if (!threadId) {
-      console.log(`[Thread] Creating new thread for session: ${sessionId}`);
       const thread = await projectClient.agents.createThread();
       threadId = thread.id;
       sessions.set(sessionId, threadId);
     }
 
-    // 3. ADD USER MESSAGE
+    // C. ADD MESSAGE
     await projectClient.agents.createMessage(threadId, {
       role: "user",
       content: message,
     });
 
-    // 4. RUN THE AGENT
-    console.log(`[Run] Starting run on thread ${threadId}...`);
+    // D. EXECUTE RUN
+    console.log(`[Execution] Starting run for "${semanticAgentName}"...`);
     let run = await projectClient.agents.createRun(threadId, agentId);
-
-    // 5. WAIT FOR RESULT (polling)
+    
+    // Poll for completion
     while (run.status === "queued" || run.status === "in_progress") {
       await new Promise((resolve) => setTimeout(resolve, 1000));
       run = await projectClient.agents.getRun(threadId, run.id);
     }
-
+    
     if (run.status !== "completed") {
-      throw new Error(`Run failed with status: ${run.status}`);
+      throw new Error(`Run failed: ${run.status}`);
     }
 
-    // 6. FETCH ANSWER
+    // E. RETRIEVE CONTENT
     const messages = await projectClient.agents.listMessages(threadId);
     const lastMessage = messages.data[0]; 
-
+    
     let content = "";
     const sources = [];
 
@@ -123,15 +112,11 @@ app.post('/api/chat', async (req, res) => {
       for (const item of lastMessage.content) {
         if (item.type === "text") {
           content += item.text.value;
-          // Check for citations
-          if (item.text.annotations && item.text.annotations.length > 0) {
-             sources.push("MovieLabs OMC"); 
-          }
+          if (item.text.annotations?.length > 0) sources.push("Source Citation");
         }
       }
     }
 
-    console.log(`[Response] Sent ${content.length} chars to user.`);
     res.json({
       id: lastMessage.id,
       content: content,
@@ -140,9 +125,8 @@ app.post('/api/chat', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('[Chat Error]', error);
-    // Clear cache on error just in case ID changed
-    if (error.message.includes("Agent")) cachedAgentId = null;
+    console.error("[Error]", error.message);
+    cachedAgentId = null; // Clear cache on error
     res.status(500).json({ error: error.message });
   }
 });
@@ -159,11 +143,11 @@ app.get('*', (req, res) => res.sendFile(join(__dirname, 'dist', 'index.html')));
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`
-  SERVER STARTED
-  ---------------------------------------
-  Endpoint:   ${connectionString}
-  Agent Name: ${targetAgentName}
-  Listening:  http://0.0.0.0:${PORT}
-  ---------------------------------------
+  AZURE AI AGENT SERVICE (NEW WAY)
+  -----------------------------------
+  Project:  ${connectionString}
+  Agent:    ${semanticAgentName} (Name-Based)
+  Status:   Ready
+  -----------------------------------
   `);
 });
