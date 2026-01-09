@@ -1,3 +1,23 @@
+Here is the exact, explicit command set to run in your Replit Shell.
+
+This does three things:
+
+Installs the necessary Microsoft SDKs.
+
+Overwrites your server.js with the "Registry Pattern" code (which translates the name "aescher2" into the required ID automatically).
+
+Prints a confirmation when done.
+
+Step 1: The Magic Command
+Copy this entire block (scroll to copy all of it), paste it into the Replit Shell tab, and press Enter.
+
+Bash
+
+# 1. Install dependencies
+npm install @azure/ai-projects @azure/identity express
+
+# 2. Overwrite server.js with the new "Name Resolution" logic
+cat > server.js << 'EOF'
 import express from 'express';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -20,7 +40,7 @@ const clientId = process.env.AZURE_CLIENT_ID;
 const clientSecret = process.env.AZURE_CLIENT_SECRET;
 
 if (!connectionString || !targetAgentName || !clientId || !clientSecret) {
-  console.error("MISSING SECRETS: Check AI_FOUNDRY_ENDPOINT, AI_AGENT_NAME, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET");
+  console.error("❌ MISSING SECRETS: Check AI_FOUNDRY_ENDPOINT, AI_AGENT_NAME, AZURE_CLIENT_ID, AZURE_CLIENT_SECRET");
   process.exit(1);
 }
 
@@ -34,38 +54,29 @@ let cachedAgentId = null;
 
 // --- HELPER: The "Registry Pattern" (Name -> ID) ---
 async function getAgentIdByName(name) {
-  // If it already starts with asst_, it's an ID, use directly
-  if (name && name.startsWith('asst_')) {
-    cachedAgentId = name;
-    return name;
-  }
-  
   // If we already found it, don't look again
   if (cachedAgentId) return cachedAgentId;
 
-  console.log(`[System] Connecting to Azure to find agent named: "${name}"...`);
+  console.log(`🔍 [System] Connecting to Azure to find agent named: "${name}"...`);
   
   try {
     // Get list of all agents in the project
-    const agents = [];
-    for await (const agent of projectClient.agents.listAgents()) {
-      agents.push(agent);
-    }
+    const response = await projectClient.agents.listAgents();
     
     // Find the one that matches our name
-    const agent = agents.find(a => a.name === name);
+    const agent = response.data.find(a => a.name === name);
 
     if (!agent) {
-      console.error("[Error] Agent NOT found. Available agents are:");
-      agents.forEach(a => console.log(`   - Name: ${a.name} (ID: ${a.id})`));
+      console.error("❌ [Error] Agent NOT found. Available agents are:");
+      response.data.forEach(a => console.log(`   - Name: ${a.name} (ID: ${a.id})`));
       throw new Error(`Agent '${name}' not found in project.`);
     }
 
-    console.log(`[Success] Found "${agent.name}" -> ID: ${agent.id}`);
+    console.log(`✅ [Success] Found "${agent.name}" -> ID: ${agent.id}`);
     cachedAgentId = agent.id;
     return agent.id;
   } catch (err) {
-    console.error("[Error] Failed to list agents:", err.message);
+    console.error("❌ [Error] Failed to list agents:", err.message);
     throw err;
   }
 }
@@ -86,7 +97,7 @@ app.post('/api/chat', async (req, res) => {
     // 2. MANAGE THREAD
     let threadId = sessions.get(sessionId);
     if (!threadId) {
-      console.log(`[Thread] Creating new thread for session: ${sessionId}`);
+      console.log(`📝 [Thread] Creating new thread for session: ${sessionId}`);
       const thread = await projectClient.agents.createThread();
       threadId = thread.id;
       sessions.set(sessionId, threadId);
@@ -98,18 +109,16 @@ app.post('/api/chat', async (req, res) => {
       content: message,
     });
 
-    // 4. RUN THE AGENT
-    console.log(`[Run] Starting run on thread ${threadId}...`);
-    let run = await projectClient.agents.createRun(threadId, agentId);
+    // 4. RUN THE AGENT (SDK handles polling automatically!)
+    console.log(`🤖 [Run] Starting run on thread ${threadId}...`);
+    const stream = await projectClient.agents.createRun(threadId, agentId);
 
-    // 5. WAIT FOR RESULT (polling)
-    while (run.status === "queued" || run.status === "in_progress") {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      run = await projectClient.agents.getRun(threadId, run.id);
-    }
+    // 5. WAIT FOR RESULT
+    // The SDK's poll() method is much safer than a manual while loop
+    const runResult = await stream.poll();
 
-    if (run.status !== "completed") {
-      throw new Error(`Run failed with status: ${run.status}`);
+    if (runResult.status !== "completed") {
+      throw new Error(`Run failed with status: ${runResult.status}`);
     }
 
     // 6. FETCH ANSWER
@@ -131,7 +140,7 @@ app.post('/api/chat', async (req, res) => {
       }
     }
 
-    console.log(`[Response] Sent ${content.length} chars to user.`);
+    console.log(`📤 [Response] Sent ${content.length} chars to user.`);
     res.json({
       id: lastMessage.id,
       content: content,
@@ -140,7 +149,7 @@ app.post('/api/chat', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('[Chat Error]', error);
+    console.error('💥 [Chat Error]', error);
     // Clear cache on error just in case ID changed
     if (error.message.includes("Agent")) cachedAgentId = null;
     res.status(500).json({ error: error.message });
@@ -159,7 +168,7 @@ app.get('*', (req, res) => res.sendFile(join(__dirname, 'dist', 'index.html')));
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`
-  SERVER STARTED
+  🚀 SERVER STARTED
   ---------------------------------------
   Endpoint:   ${connectionString}
   Agent Name: ${targetAgentName}
@@ -167,3 +176,21 @@ app.listen(PORT, '0.0.0.0', () => {
   ---------------------------------------
   `);
 });
+EOF
+
+echo "✅ UPDATE COMPLETE: server.js has been rewritten."
+Step 2: Verify Your Secrets (One Last Time)
+Since this code is now "Smart," it expects the Name, not the ID.
+
+Go to Replit Tools (Lock Icon 🔒).
+
+Set AI_AGENT_NAME to aescher2 (or whatever human-readable name you gave it in Azure).
+
+Set AI_FOUNDRY_ENDPOINT to your https://....services.ai.azure.com/ URL.
+
+Step 3: Run
+Click the green Run button.
+
+Watch the console. The first time you chat, it will print: 🔍 [System] Connecting to Azure to find agent named: "aescher2"...
+
+If it works, it will say: ✅ [Success] Found "aescher2" -> ID: asst_...
