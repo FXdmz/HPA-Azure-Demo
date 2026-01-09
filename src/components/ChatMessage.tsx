@@ -1,7 +1,24 @@
 import { cn } from "@/lib/utils";
 import { Badge } from "@/components/ui/badge";
-import { Bot, User, FileText } from "lucide-react";
+import { Bot, User, FileText, Clock, Coins, Wrench, Shield, ShieldAlert, ShieldCheck } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+
+interface MessageMeta {
+  duration_ms: number;
+  tokens: {
+    total: number;
+    prompt: number;
+    completion: number;
+  } | null;
+  tool_used: boolean;
+  tool_names: string[];
+  model: string;
+  safety: {
+    status: string;
+    violation: string | null;
+  };
+  citations: string[];
+}
 
 interface ChatMessageProps {
   role: "user" | "assistant";
@@ -9,6 +26,7 @@ interface ChatMessageProps {
   sources?: string[];
   isLoading?: boolean;
   timestamp?: number;
+  meta?: MessageMeta;
 }
 
 export function ChatMessage({ 
@@ -16,7 +34,8 @@ export function ChatMessage({
   content, 
   sources = [], 
   isLoading = false,
-  timestamp 
+  timestamp,
+  meta
 }: ChatMessageProps) {
   const isUser = role === "user";
 
@@ -86,6 +105,49 @@ export function ChatMessage({
                 {source}
               </Badge>
             ))}
+          </div>
+        )}
+
+        {/* Message Metadata */}
+        {meta && !isLoading && !isUser && (
+          <div className="text-xs text-muted-foreground mt-2 border-t border-border/50 pt-2 flex flex-wrap gap-3">
+            <span className="flex items-center gap-1">
+              <Clock className="h-3 w-3" />
+              {(meta.duration_ms / 1000).toFixed(2)}s
+            </span>
+            {meta.tokens && (
+              <span className="flex items-center gap-1">
+                <Coins className="h-3 w-3" />
+                {meta.tokens.total} tokens
+              </span>
+            )}
+            <span className="flex items-center gap-1">
+              <Wrench className="h-3 w-3" />
+              Tools: {meta.tool_used ? "Yes" : "No"}
+              {meta.tool_used && meta.tool_names.length > 0 && (
+                <span className="text-muted-foreground/70">
+                  ({meta.tool_names.join(', ')})
+                </span>
+              )}
+            </span>
+            {meta.safety?.status === "passed" && (
+              <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
+                <ShieldCheck className="h-3 w-3" />
+                Safety: Passed
+              </span>
+            )}
+            {meta.safety?.status === "blocked" && (
+              <span className="flex items-center gap-1 text-red-600 dark:text-red-400 font-medium">
+                <ShieldAlert className="h-3 w-3" />
+                Blocked: {meta.safety.violation}
+              </span>
+            )}
+            {meta.safety?.status === "truncated" && (
+              <span className="flex items-center gap-1 text-amber-600 dark:text-amber-400">
+                <Shield className="h-3 w-3" />
+                Truncated
+              </span>
+            )}
           </div>
         )}
 

@@ -19,12 +19,30 @@ import {
 } from "lucide-react";
 import greenlightLogo from "@assets/greenlight_logo_1767803838031.png";
 
+interface MessageMeta {
+  duration_ms: number;
+  tokens: {
+    total: number;
+    prompt: number;
+    completion: number;
+  } | null;
+  tool_used: boolean;
+  tool_names: string[];
+  model: string;
+  safety: {
+    status: string;
+    violation: string | null;
+  };
+  citations: string[];
+}
+
 interface Message {
   id: string;
   role: "user" | "assistant";
   content: string;
   sources?: string[];
   timestamp: number;
+  meta?: MessageMeta;
 }
 
 export function ChatInterface() {
@@ -101,6 +119,7 @@ export function ChatInterface() {
         content: response.content,
         sources: response.sources,
         timestamp: Date.now(),
+        meta: response.meta,
       };
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (err) {
@@ -256,6 +275,7 @@ export function ChatInterface() {
                 content={message.content}
                 sources={message.sources}
                 timestamp={message.timestamp}
+                meta={message.meta}
               />
             ))}
 

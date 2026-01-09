@@ -1,8 +1,26 @@
+interface MessageMeta {
+  duration_ms: number;
+  tokens: {
+    total: number;
+    prompt: number;
+    completion: number;
+  } | null;
+  tool_used: boolean;
+  tool_names: string[];
+  model: string;
+  safety: {
+    status: string;
+    violation: string | null;
+  };
+  citations: string[];
+}
+
 interface AgentResponse {
   id: string;
   content: string;
   sources: string[];
   threadId?: string;
+  meta?: MessageMeta;
 }
 
 interface AgentInfo {

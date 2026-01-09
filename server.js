@@ -125,6 +125,7 @@ app.post('/api/chat', async (req, res) => {
     await projectClient.agents.messages.create(threadId, "user", message);
 
     console.log(`[Execution] Starting run for agent ${agentId}...`);
+    const runStartTime = Date.now();
     let run = await projectClient.agents.runs.create(threadId, agentId);
     console.log(`[Execution] Run created: ${run.id}, status: ${run.status}`);
     
@@ -133,10 +134,56 @@ app.post('/api/chat', async (req, res) => {
       run = await projectClient.agents.runs.get(threadId, run.id);
       console.log(`[Execution] Run status: ${run.status}`);
     }
-    
-    if (run.status !== "completed") {
+
+    // --- HANDLE SAFETY FAILURES ---
+    let safetyStatus = "passed";
+    let failureReason = null;
+
+    if (run.status === "failed") {
+      if (run.lastError?.code === "content_filter") {
+        safetyStatus = "blocked";
+        failureReason = "Content Filter Triggered";
+        return res.json({
+          id: `blocked-${Date.now()}`,
+          content: "The response was blocked by safety filters.",
+          role: "assistant",
+          sources: [],
+          meta: { safety: { status: "blocked", violation: failureReason } }
+        });
+      } else {
+        throw new Error(`Run failed: ${run.lastError?.message || run.status}`);
+      }
+    }
+
+    if (run.status === "incomplete" && run.incompleteDetails?.reason === "content_filter") {
+      safetyStatus = "truncated";
+      failureReason = "Response truncated due to safety violation";
+    }
+
+    if (run.status !== "completed" && run.status !== "incomplete") {
       throw new Error(`Run failed: ${run.status}`);
     }
+
+    // --- FETCH RUN STEPS (for tool usage) ---
+    const steps = [];
+    try {
+      for await (const step of projectClient.agents.runs.steps.list(threadId, run.id)) {
+        steps.push(step);
+      }
+    } catch (stepErr) {
+      console.log('[Steps] Could not fetch run steps:', stepErr.message);
+    }
+
+    const toolsUsed = steps.some(s => s.type === 'tool_calls');
+    const toolNames = steps
+      .filter(s => s.type === 'tool_calls')
+      .flatMap(s => {
+        const calls = s.stepDetails?.toolCalls || s.step_details?.tool_calls || [];
+        return calls.map(tc => tc.function?.name || tc.type || 'unknown');
+      });
+
+    // --- TIMING ---
+    const durationMs = Date.now() - runStartTime;
 
     console.log(`[Messages] Fetching messages from thread ${threadId}`);
     const allMessages = [];
@@ -150,6 +197,7 @@ app.post('/api/chat', async (req, res) => {
     
     let content = "";
     const sources = [];
+    const citations = [];
 
     if (lastMessage) {
       console.log(`[Messages] Processing assistant message: ${lastMessage.id}`);
@@ -157,8 +205,10 @@ app.post('/api/chat', async (req, res) => {
         for (const item of lastMessage.content) {
           if (item.type === "text") {
             content += item.text?.value || "";
-            if (item.text?.annotations?.length > 0) {
+            const annotations = item.text?.annotations || [];
+            if (annotations.length > 0) {
               sources.push("Source Citation");
+              citations.push(...annotations.map(a => a.fileCitation || a.file_citation || a.filePath || a.file_path));
             }
           }
         }
@@ -170,7 +220,23 @@ app.post('/api/chat', async (req, res) => {
       id: lastMessage?.id,
       content: content,
       sources: [...new Set(sources)],
-      threadId: threadId
+      threadId: threadId,
+      meta: {
+        duration_ms: durationMs,
+        tokens: run.usage ? {
+          total: run.usage.totalTokens || run.usage.total_tokens || 0,
+          prompt: run.usage.promptTokens || run.usage.prompt_tokens || 0,
+          completion: run.usage.completionTokens || run.usage.completion_tokens || 0
+        } : null,
+        tool_used: toolsUsed,
+        tool_names: [...new Set(toolNames)],
+        model: run.model,
+        safety: {
+          status: safetyStatus,
+          violation: failureReason
+        },
+        citations: citations.filter(c => c)
+      }
     });
 
   } catch (error) {
