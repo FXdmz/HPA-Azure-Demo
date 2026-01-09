@@ -1,0 +1,256 @@
+Here are the exact, copy-paste commands to run in your Replit Shell. This will configure your Agent to know about the tool and update your Server to run it.
+
+### **Step 1: Teach the Agent (Run this once)**
+
+This script connects to Azure and adds the "getFactCard" tool definition to your agent (`aescher2`).
+
+**Copy and paste this into the Replit Shell and hit Enter:**
+
+```bash
+cat > update_agent.js << 'EOF'
+import { ClientSecretCredential } from '@azure/identity';
+import { AIProjectClient } from '@azure/ai-projects';
+
+const connectionString = process.env.AI_FOUNDRY_ENDPOINT;
+const agentName = process.env.AI_AGENT_NAME;
+
+if (!connectionString || !agentName) {
+  console.error("❌ Missing secrets! Check AI_FOUNDRY_ENDPOINT and AI_AGENT_NAME.");
+  process.exit(1);
+}
+
+const credential = new ClientSecretCredential(
+  process.env.AZURE_TENANT_ID,
+  process.env.AZURE_CLIENT_ID,
+  process.env.AZURE_CLIENT_SECRET
+);
+
+const projectClient = new AIProjectClient(connectionString, credential);
+
+async function main() {
+  console.log(`🔎 Finding agent: "${agentName}"...`);
+  const response = await projectClient.agents.listAgents();
+  const agent = response.data.find(a => a.name === agentName);
+
+  if (!agent) {
+    console.error(`❌ Agent '${agentName}' not found.`);
+    return;
+  }
+
+  console.log(`✅ Found Agent ID: ${agent.id}`);
+  console.log(`⚙️ Updating agent with 'getFactCard' tool definition...`);
+
+  // Define the tool
+  const factCardTool = {
+    type: "function",
+    function: {
+      name: "getFactCard",
+      description: "Retrieves verified fact cards from the Truth Engine (CosmosDB). Use this whenever the user asks about a movie, person, or production entity to get grounded facts.",
+      parameters: {
+        type: "object",
+        properties: {
+          name: {
+            type: "string",
+            description: "The name of the entity to search for (e.g., 'Die Hard')."
+          }
+        },
+        required: ["name"]
+      }
+    }
+  };
+
+  // Preserve existing tools (like file_search) and add the new one
+  const currentTools = agent.tools.filter(t => t.type !== 'function' || t.function.name !== 'getFactCard');
+  const newTools = [...currentTools, factCardTool];
+
+  await projectClient.agents.updateAgent(agent.id, {
+    tools: newTools
+  });
+
+  console.log(`🎉 Success! Agent '${agentName}' is now connected to the Tool.`);
+}
+
+main().catch(console.error);
+EOF
+
+# Run the script immediately
+node update_agent.js
+
+```
+
+---
+
+### **Step 2: Update the Server (The "Bridge")**
+
+This overwrites `server.js` with the logic that listens for the Agent's request, calls your Azure Function, and sends the data back.
+
+**Copy and paste this into the Replit Shell and hit Enter:**
+
+```bash
+cat > server.js << 'EOF'
+import express from 'express';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import { ClientSecretCredential } from '@azure/identity';
+import { AIProjectClient } from '@azure/ai-projects';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const app = express();
+app.use(express.json());
+
+const PORT = process.env.PORT || 3001;
+
+// --- CONFIGURATION ---
+const connectionString = process.env.AI_FOUNDRY_ENDPOINT;
+const agentName = process.env.AI_AGENT_NAME;
+const credential = new ClientSecretCredential(
+  process.env.AZURE_TENANT_ID,
+  process.env.AZURE_CLIENT_ID,
+  process.env.AZURE_CLIENT_SECRET
+);
+const projectClient = new AIProjectClient(connectionString, credential);
+
+// --- TOOL EXECUTOR ---
+// This function acts as the "Waiter" calling your Kitchen (Azure Function)
+async function executeFactCardTool(name) {
+  console.log(`🔎 [Tool] Connecting to Azure Function for: "${name}"...`);
+  
+  // Your Azure Function URL from the screenshot
+  const url = `https://aescher-func-a8gdetcud6g8a5b6.canadacentral-01.azurewebsites.net/api/getfactcard?name=${encodeURIComponent(name)}`;
+  
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+        return JSON.stringify({ error: `Azure Function returned ${response.status}` });
+    }
+    const data = await response.json();
+    console.log(`✅ [Tool] Azure Function returned ${data.length || 0} records.`);
+    return JSON.stringify(data);
+  } catch (error) {
+    console.error("❌ [Tool] Failed to call Azure Function:", error.message);
+    return JSON.stringify({ error: "Connection to Truth Engine failed." });
+  }
+}
+
+// --- HELPER: Resolve Name to ID ---
+async function resolveAgentId(name) {
+  const response = await projectClient.agents.listAgents();
+  const agent = response.data.find(a => a.name === name);
+  if (!agent) throw new Error(`Agent "${name}" not found.`);
+  return agent.id;
+}
+
+// --- API ROUTES ---
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', agent: agentName });
+});
+
+app.get('/api/agent', async (req, res) => {
+  try {
+    const id = await resolveAgentId(agentName);
+    const agent = await projectClient.agents.getAgent(id);
+    res.json({
+      name: agent.name,
+      id: agent.id,
+      model: agent.model,
+      tools: agent.tools.map(t => t.type === 'function' ? `fn:${t.function.name}` : t.type)
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/api/chat', async (req, res) => {
+  try {
+    const { message, sessionId = 'default' } = req.body;
+    const agentId = await resolveAgentId(agentName);
+
+    // 1. Start Thread & Run
+    const thread = await projectClient.agents.threads.create();
+    await projectClient.agents.messages.create(thread.id, { role: "user", content: message });
+    console.log(`🚀 Starting Run for ${agentName}...`);
+    let run = await projectClient.agents.runs.create(thread.id, agentId);
+
+    // 2. Smart Polling Loop (Handles Tools)
+    while (['queued', 'in_progress', 'requires_action'].includes(run.status)) {
+      await new Promise(r => setTimeout(r, 1000));
+      run = await projectClient.agents.runs.get(thread.id, run.id);
+      
+      // IF Agent asks for a tool...
+      if (run.status === "requires_action") {
+        console.log("⚡ Agent is requesting 'getFactCard'...");
+        const toolOutputs = [];
+        const toolCalls = run.required_action.submit_tool_outputs.tool_calls;
+
+        for (const toolCall of toolCalls) {
+          if (toolCall.function.name === "getFactCard") {
+            const args = JSON.parse(toolCall.function.arguments);
+            
+            // Execute our Azure Function
+            const output = await executeFactCardTool(args.name);
+            
+            toolOutputs.push({
+              tool_call_id: toolCall.id,
+              output: output
+            });
+          }
+        }
+
+        // Send data back to Agent
+        if (toolOutputs.length > 0) {
+            console.log("📤 Sending data back to Agent...");
+            await projectClient.agents.runs.submitToolOutputs(thread.id, run.id, {
+                tool_outputs: toolOutputs
+            });
+        }
+      }
+    }
+
+    if (run.status !== "completed") throw new Error(`Run failed: ${run.status}`);
+
+    // 3. Get Final Message
+    const messages = await projectClient.agents.messages.list(thread.id);
+    const lastMsg = messages.data[0];
+    const content = lastMsg.content[0].text.value;
+    
+    // Check if tool was actually used in the conversation (simplified check)
+    // For full detail we would check run steps
+    
+    res.json({
+        id: lastMsg.id,
+        content: content,
+        role: "assistant",
+        sources: ["Truth Engine (CosmosDB)"], 
+        meta: { 
+            tool_used: true,
+            model: run.model
+        }
+    });
+
+  } catch (error) {
+    console.error("Chat Error:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Serve frontend
+app.use(express.static(join(__dirname, 'dist')));
+app.get('*', (req, res) => res.sendFile(join(__dirname, 'dist', 'index.html')));
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`✅ Truth Engine Server Running on port ${PORT}`);
+});
+EOF
+
+```
+
+### **Step 3: Test It**
+
+1. Click **Stop** (top right of Replit), then **Run**.
+2. Wait for `✅ Truth Engine Server Running on port 3001` in the console.
+3. Open the Chat UI.
+4. Ask: **"Who is the VFX vendor for Die Hard?"**
+
+You should see logs in the console confirming the tool was called (`⚡ Agent is requesting 'getFactCard'`) and the data was retrieved (`✅ [Tool] Azure Function returned...`).

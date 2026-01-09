@@ -27,6 +27,26 @@ const projectClient = new AIProjectClient(connectionString, credential);
 const sessions = new Map();
 let cachedAgentId = null;
 
+// --- TOOL EXECUTOR: Call Azure Function for getFactCard ---
+async function executeFactCardTool(name) {
+  console.log(`[Tool] Calling Azure Function for: "${name}"...`);
+  
+  const url = `https://aescher-func-a8gdetcud6g8a5b6.canadacentral-01.azurewebsites.net/api/getfactcard?name=${encodeURIComponent(name)}`;
+  
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      return JSON.stringify({ error: `Azure Function returned ${response.status}` });
+    }
+    const data = await response.json();
+    console.log(`[Tool] Azure Function returned ${data.length || 0} records.`);
+    return JSON.stringify(data);
+  } catch (error) {
+    console.error("[Tool] Failed to call Azure Function:", error.message);
+    return JSON.stringify({ error: "Connection to Truth Engine failed." });
+  }
+}
+
 // --- REGISTRY PATTERN (Resolve Name -> ID) ---
 async function resolveAgentId(name) {
   if (name && name.startsWith('asst_')) {
@@ -96,7 +116,7 @@ app.get('/api/agent', async (req, res) => {
       id: agent.id,
       model: agent.model,
       instructions: agent.instructions,
-      tools: agent.tools ? agent.tools.map(t => t.type) : [],
+      tools: agent.tools ? agent.tools.map(t => t.type === 'function' ? `fn:${t.function?.name}` : t.type) : [],
       vectorStoreIds: agent.toolResources?.fileSearch?.vectorStoreIds || [],
       createdAt: agent.createdAt ? new Date(agent.createdAt).toISOString() : null
     });
@@ -129,10 +149,37 @@ app.post('/api/chat', async (req, res) => {
     let run = await projectClient.agents.runs.create(threadId, agentId);
     console.log(`[Execution] Run created: ${run.id}, status: ${run.status}`);
     
-    while (run.status === "queued" || run.status === "in_progress") {
+    while (['queued', 'in_progress', 'requires_action'].includes(run.status)) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
       run = await projectClient.agents.runs.get(threadId, run.id);
       console.log(`[Execution] Run status: ${run.status}`);
+      
+      // Handle tool calls
+      if (run.status === "requires_action") {
+        console.log("[Tool] Agent is requesting tool execution...");
+        const toolOutputs = [];
+        const toolCalls = run.requiredAction?.submitToolOutputs?.toolCalls || 
+                          run.required_action?.submit_tool_outputs?.tool_calls || [];
+
+        for (const toolCall of toolCalls) {
+          const funcName = toolCall.function?.name;
+          console.log(`[Tool] Processing tool call: ${funcName}`);
+          
+          if (funcName === "getFactCard") {
+            const args = JSON.parse(toolCall.function.arguments);
+            const output = await executeFactCardTool(args.name);
+            toolOutputs.push({
+              toolCallId: toolCall.id,
+              output: output
+            });
+          }
+        }
+
+        if (toolOutputs.length > 0) {
+          console.log("[Tool] Submitting tool outputs back to agent...");
+          await projectClient.agents.runs.submitToolOutputs(threadId, run.id, toolOutputs);
+        }
+      }
     }
 
     // --- HANDLE SAFETY FAILURES ---
