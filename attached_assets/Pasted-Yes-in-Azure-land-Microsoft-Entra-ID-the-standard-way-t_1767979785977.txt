@@ -1,0 +1,79 @@
+Yes, in "Azure land" (Microsoft Entra ID), the standard way to handle this for your application is using **App Roles**.
+
+When a user logs in via the setup you have in `src/config/auth.ts`, Azure can inject a `roles` array directly into their **ID Token**. You don't need to make an extra API call; the roles just arrive with the user's profile.
+
+Here is how to set it up and access it.
+
+### **Step 1: Define Roles in Azure Portal**
+
+You need to tell Azure what roles exist for your app (e.g., `Admin`, `User`).
+
+1. Go to the **[Azure Portal](https://www.google.com/search?q=https://portal.azure.com)** > **Microsoft Entra ID**.
+2. Go to **App registrations** > Select your app (`Aesher-HPA-1-7-25` based on your config).
+3. In the left menu, click **App roles**.
+4. Click **+ Create app role**.
+* **Display name:** `Admin`
+* **Allowed member types:** Users/Groups
+* **Value:** `App.Admin` (This is the string you will check in code)
+* **Description:** Admins can manage settings.
+* *Click Apply.*
+
+
+
+### **Step 2: Assign Users to Roles**
+
+Now you grant those roles to specific people.
+
+1. Go back to **Microsoft Entra ID** main menu.
+2. Go to **Enterprise applications** (NOT App registrations).
+3. Find and click on your app (`Aesher-HPA-1-7-25`).
+4. Go to **Users and groups**.
+5. Click **+ Add user/group**.
+* Select the User (e.g., yourself).
+* Select the Role (e.g., `Admin`).
+* *Click Assign.*
+
+
+
+### **Step 3: Get the Roles in Your Code (React)**
+
+Your frontend is already using `useMsal`. You can access the roles immediately after login via `idTokenClaims`.
+
+You can modify `src/components/ChatInterface.tsx` (or wherever you check permissions) like this:
+
+```typescript
+import { useMsal } from "@azure/msal-react";
+
+export function ChatInterface() {
+  const { accounts } = useMsal();
+  const account = accounts[0];
+
+  // 1. Get Roles from the Token
+  // The 'roles' claim is an array of strings (e.g., ["App.Admin"])
+  const userRoles = (account?.idTokenClaims as any)?.roles || [];
+
+  // 2. Check Permission
+  const isAdmin = userRoles.includes("App.Admin");
+
+  return (
+    <div>
+      <h1>Welcome, {account?.name}</h1>
+      
+      {/* 3. Show content based on Role */}
+      {isAdmin && (
+        <button className="bg-red-500 text-white p-2">
+           Admin Settings (Only visible to App.Admin)
+        </button>
+      )}
+      
+      <div>Your Roles: {userRoles.join(", ")}</div>
+    </div>
+  );
+}
+
+```
+
+### **Summary**
+
+* **No Extra API Calls:** The roles come inside the token you are already getting in `src/config/auth.ts`.
+* **Security:** This is secure because the `roles` claim is signed by Microsoft. A user cannot fake it on the frontend.

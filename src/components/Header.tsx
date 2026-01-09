@@ -1,12 +1,14 @@
 import { useMsal, useAccount } from "@azure/msal-react";
 import { Button } from "@/components/ui/button";
-import { LogOut, User } from "lucide-react";
+import { LogOut, User, Shield } from "lucide-react";
 import movieLabsLogo from "@assets/2030_vision_logo_r-w_1767803990818.png";
 import { ThemeToggle } from "./ThemeToggle";
 
 export function Header() {
   const { instance, accounts } = useMsal();
   const account = useAccount(accounts[0] || {});
+
+  const userRoles = (account?.idTokenClaims as any)?.roles || [];
 
   const handleLogout = () => {
     instance.logoutPopup();
@@ -46,6 +48,14 @@ export function Header() {
                   <p className="text-xs text-muted-foreground">
                     {account.username}
                   </p>
+                  {userRoles.length > 0 && (
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <Shield className="h-3 w-3 text-emerald-500" />
+                      <span className="text-xs text-emerald-600 dark:text-emerald-400 font-medium">
+                        {userRoles.join(", ")}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
               <Button
