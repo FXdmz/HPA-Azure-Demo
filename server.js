@@ -90,7 +90,7 @@ app.get('/api/health', async (req, res) => {
       status: 'ok', 
       agentName: agent.name,
       agentId: agent.id,
-      sdkVersion: '2.0.0-beta.3',
+      sdkVersion: '1.0.1',
       mode: 'dynamic-resolution' 
     });
   } catch (error) {
@@ -98,7 +98,7 @@ app.get('/api/health', async (req, res) => {
       status: 'ok', 
       agentName: semanticAgentName,
       agentId: cachedAgentId || semanticAgentName,
-      sdkVersion: '2.0.0-beta.3',
+      sdkVersion: '1.0.1',
       mode: 'dynamic-resolution' 
     });
   }
@@ -132,27 +132,24 @@ app.post('/api/chat', async (req, res) => {
     let threadId = sessions.get(sessionId);
     if (!threadId) {
       console.log(`[Thread] Creating new thread for session: ${sessionId}`);
-      const thread = await projectClient.agents.createThread();
+      const thread = await projectClient.agents.threads.create();
       threadId = thread.id;
       sessions.set(sessionId, threadId);
       console.log(`[Thread] Created thread: ${threadId}`);
     }
 
     console.log(`[Message] Adding user message to thread ${threadId}`);
-    await projectClient.agents.createMessage(threadId, {
-      role: "user",
-      content: message,
-    });
+    await projectClient.agents.messages.create(threadId, "user", message);
 
     console.log(`[Execution] Starting run for agent ${agentId}...`);
     const runStartTime = Date.now();
     
-    let run = await projectClient.agents.createRun(threadId, { assistantId: agentId });
+    let run = await projectClient.agents.runs.create(threadId, agentId);
     console.log(`[Execution] Run created: ${run.id}, status: ${run.status}`);
     
     while (['queued', 'in_progress', 'requires_action'].includes(run.status)) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
-      run = await projectClient.agents.getRun(threadId, run.id);
+      run = await projectClient.agents.runs.get(threadId, run.id);
       console.log(`[Execution] Run status: ${run.status}`);
       
       if (run.status === "requires_action") {
@@ -177,7 +174,7 @@ app.post('/api/chat', async (req, res) => {
 
         if (toolOutputs.length > 0) {
           console.log("[Tool] Submitting tool outputs back to agent...");
-          await projectClient.agents.submitToolOutputsToRun(threadId, run.id, toolOutputs);
+          await projectClient.agents.runs.submitToolOutputs(threadId, run.id, toolOutputs);
         }
       }
     }
@@ -212,7 +209,7 @@ app.post('/api/chat', async (req, res) => {
 
     const steps = [];
     try {
-      for await (const step of projectClient.agents.listRunSteps(threadId, run.id)) {
+      for await (const step of projectClient.agents.runs.steps.list(threadId, run.id)) {
         steps.push(step);
       }
     } catch (stepErr) {
@@ -231,7 +228,7 @@ app.post('/api/chat', async (req, res) => {
 
     console.log(`[Messages] Fetching messages from thread ${threadId}`);
     const allMessages = [];
-    for await (const msg of projectClient.agents.listMessages(threadId)) {
+    for await (const msg of projectClient.agents.messages.list(threadId)) {
       allMessages.push(msg);
     }
     console.log(`[Messages] Found ${allMessages.length} messages`);
@@ -300,7 +297,7 @@ app.get('*', (req, res) => res.sendFile(join(__dirname, 'dist', 'index.html')));
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`
-  AZURE AI AGENT SERVICE (SDK 2.0.0-beta.3)
+  AZURE AI AGENT SERVICE (SDK 1.0.1)
   -----------------------------------
   Project:  ${connectionString}
   Agent:    ${semanticAgentName} (Name-Based)
