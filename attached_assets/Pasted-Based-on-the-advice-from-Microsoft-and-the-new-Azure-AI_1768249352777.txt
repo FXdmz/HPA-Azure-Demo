@@ -1,0 +1,213 @@
+Based on the advice from Microsoft and the new Azure AI Projects SDK documentation, the key fix is indeed updating the **`@azure/ai-projects`** package to the specific beta version that supports the new Agent Service capabilities (like the Registry Pattern and improved polling).
+
+Your current `package.json` is using `^1.0.1`, which may be why the advanced Agent features are failing or behaving inconsistently.
+
+Here are the updated files to get your project working with the **New API**.
+
+### **1. Update `package.json**`
+
+I have updated the `@azure/ai-projects` version to **`2.0.0-beta.3`** as recommended.
+
+```json
+{
+  "name": "hpa-greenlight-2026-agent",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "preview": "vite preview",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@azure/ai-projects": "2.0.0-beta.3",
+    "@azure/identity": "^4.13.0",
+    "@azure/msal-browser": "^3.26.1",
+    "@azure/msal-react": "^2.1.1",
+    "@radix-ui/react-dialog": "^1.1.1",
+    "@radix-ui/react-dropdown-menu": "^2.1.1",
+    "@radix-ui/react-label": "^2.1.0",
+    "@radix-ui/react-progress": "^1.1.0",
+    "@radix-ui/react-scroll-area": "^1.1.0",
+    "@radix-ui/react-separator": "^1.1.0",
+    "@radix-ui/react-slot": "^1.1.0",
+    "@radix-ui/react-tabs": "^1.1.0",
+    "@radix-ui/react-tooltip": "^1.1.2",
+    "class-variance-authority": "^0.7.0",
+    "clsx": "^2.1.1",
+    "express": "^4.22.1",
+    "lucide-react": "^0.441.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-markdown": "^9.0.1",
+    "tailwind-merge": "^2.5.2",
+    "tailwindcss-animate": "^1.0.7",
+    "zustand": "^4.5.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.5",
+    "@types/react": "^18.3.8",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.11",
+    "typescript": "^5.6.2",
+    "vite": "^5.4.6"
+  }
+}
+
+```
+
+### **2. Update `server.js` (Backend)**
+
+This version uses the **Registry Pattern** to dynamically find your agent by name ("aescher2") and uses the built-in polling helpers from the SDK, which is much more stable than a manual `while` loop.
+
+```javascript
+import express from 'express';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+import { ClientSecretCredential } from '@azure/identity';
+import { AIProjectClient } from '@azure/ai-projects';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+const app = express();
+app.use(express.json());
+
+const PORT = process.env.PORT || 3001;
+
+// --- CONFIGURATION ---
+const connectionString = process.env.AI_FOUNDRY_ENDPOINT;
+const targetAgentName = process.env.AI_AGENT_NAME; // e.g. "aescher2"
+
+const credential = new ClientSecretCredential(
+  process.env.AZURE_TENANT_ID,
+  process.env.AZURE_CLIENT_ID,
+  process.env.AZURE_CLIENT_SECRET
+);
+
+// Initialize the Project Client
+const projectClient = new AIProjectClient(connectionString, credential);
+
+// Cache the Agent ID so we don't look it up every time
+let cachedAgentId = null;
+
+// --- HELPER: Resolve Agent Name to ID ---
+async function getAgentIdByName(name) {
+  if (cachedAgentId) return cachedAgentId;
+
+  console.log(`🔎 [Registry] Finding agent: "${name}"...`);
+  const response = await projectClient.agents.listAgents();
+  
+  // The SDK returns a paginated list, we iterate to find the match
+  let foundAgent = null;
+  for await (const agent of response) {
+    if (agent.name === name) {
+      foundAgent = agent;
+      break;
+    }
+  }
+
+  if (!foundAgent) {
+    throw new Error(`Agent "${name}" not found in project.`);
+  }
+
+  console.log(`✅ [Registry] Found ID: ${foundAgent.id}`);
+  cachedAgentId = foundAgent.id;
+  return foundAgent.id;
+}
+
+// --- API ROUTES ---
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', agent: targetAgentName, version: '2.0.0-beta.3' });
+});
+
+app.post('/api/chat', async (req, res) => {
+  try {
+    const { message, sessionId = 'default' } = req.body;
+    
+    // 1. Get Agent ID
+    const agentId = await getAgentIdByName(targetAgentName);
+
+    // 2. Create Thread
+    // In a real app, you would store threadId in a DB linked to sessionId
+    const thread = await projectClient.agents.createThread();
+    const threadId = thread.id;
+
+    // 3. Add User Message
+    await projectClient.agents.createMessage(threadId, {
+      role: "user",
+      content: message,
+    });
+
+    // 4. Run the Agent (using new poll helper)
+    console.log(`🤖 [Run] Starting run on thread ${threadId}...`);
+    const stream = await projectClient.agents.createRun(threadId, agentId);
+    
+    // The new SDK handles the polling loop for us
+    const runResult = await stream.poll();
+
+    if (runResult.status !== "completed") {
+      throw new Error(`Run failed with status: ${runResult.status}`);
+    }
+
+    // 5. Get Response
+    const messages = await projectClient.agents.listMessages(threadId);
+    const lastMessage = messages.data[0];
+
+    let content = "";
+    const sources = [];
+
+    if (lastMessage.role === "assistant") {
+      for (const item of lastMessage.content) {
+        if (item.type === "text") {
+          content += item.text.value;
+          // Check for citations
+          if (item.text.annotations && item.text.annotations.length > 0) {
+             sources.push("MovieLabs OMC");
+          }
+        }
+      }
+    }
+
+    res.json({
+      id: lastMessage.id,
+      content: content,
+      sources: [...new Set(sources)],
+      threadId: threadId
+    });
+
+  } catch (error) {
+    console.error('❌ [Chat Error]', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.use(express.static(join(__dirname, 'dist')));
+app.get('*', (req, res) => res.sendFile(join(__dirname, 'dist', 'index.html')));
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Agent Target: ${targetAgentName}`);
+});
+
+```
+
+### **How to Apply This in Replit**
+
+1. **Update `package.json`:** Open `package.json` and replace the dependencies block with the one above.
+2. **Update `server.js`:** Open `server.js` and paste the updated code above.
+3. **Install & Run:** Go to the Shell and run:
+```bash
+npm install
+npm run build
+npm start
+
+```
+
+
+
+This should align perfectly with the Microsoft advice and the new Foundry capabilities.

@@ -12,7 +12,6 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3001;
 
-// --- CONFIGURATION ---
 const connectionString = process.env.AI_FOUNDRY_ENDPOINT; 
 const semanticAgentName = process.env.AI_AGENT_NAME;
 
@@ -27,7 +26,6 @@ const projectClient = new AIProjectClient(connectionString, credential);
 const sessions = new Map();
 let cachedAgentId = null;
 
-// --- TOOL EXECUTOR: Call Azure Function for getFactCard ---
 async function executeFactCardTool(name) {
   console.log(`[Tool] Calling Azure Function for: "${name}"...`);
   
@@ -47,7 +45,6 @@ async function executeFactCardTool(name) {
   }
 }
 
-// --- REGISTRY PATTERN (Resolve Name -> ID) ---
 async function resolveAgentId(name) {
   if (name && name.startsWith('asst_')) {
     cachedAgentId = name;
@@ -74,7 +71,6 @@ async function resolveAgentId(name) {
   return agent.id;
 }
 
-// Helper: Get full agent object
 async function getAgentDetails() {
   const agents = [];
   for await (const agent of projectClient.agents.listAgents()) {
@@ -94,6 +90,7 @@ app.get('/api/health', async (req, res) => {
       status: 'ok', 
       agentName: agent.name,
       agentId: agent.id,
+      sdkVersion: '2.0.0-beta.3',
       mode: 'dynamic-resolution' 
     });
   } catch (error) {
@@ -101,6 +98,7 @@ app.get('/api/health', async (req, res) => {
       status: 'ok', 
       agentName: semanticAgentName,
       agentId: cachedAgentId || semanticAgentName,
+      sdkVersion: '2.0.0-beta.3',
       mode: 'dynamic-resolution' 
     });
   }
@@ -134,27 +132,29 @@ app.post('/api/chat', async (req, res) => {
     let threadId = sessions.get(sessionId);
     if (!threadId) {
       console.log(`[Thread] Creating new thread for session: ${sessionId}`);
-      const thread = await projectClient.agents.threads.create();
+      const thread = await projectClient.agents.createThread();
       threadId = thread.id;
       sessions.set(sessionId, threadId);
       console.log(`[Thread] Created thread: ${threadId}`);
     }
 
     console.log(`[Message] Adding user message to thread ${threadId}`);
-    // Correct signature: create(threadId, role, content)
-    await projectClient.agents.messages.create(threadId, "user", message);
+    await projectClient.agents.createMessage(threadId, {
+      role: "user",
+      content: message,
+    });
 
     console.log(`[Execution] Starting run for agent ${agentId}...`);
     const runStartTime = Date.now();
-    let run = await projectClient.agents.runs.create(threadId, agentId);
+    
+    let run = await projectClient.agents.createRun(threadId, { assistantId: agentId });
     console.log(`[Execution] Run created: ${run.id}, status: ${run.status}`);
     
     while (['queued', 'in_progress', 'requires_action'].includes(run.status)) {
       await new Promise((resolve) => setTimeout(resolve, 1000));
-      run = await projectClient.agents.runs.get(threadId, run.id);
+      run = await projectClient.agents.getRun(threadId, run.id);
       console.log(`[Execution] Run status: ${run.status}`);
       
-      // Handle tool calls
       if (run.status === "requires_action") {
         console.log("[Tool] Agent is requesting tool execution...");
         const toolOutputs = [];
@@ -177,12 +177,11 @@ app.post('/api/chat', async (req, res) => {
 
         if (toolOutputs.length > 0) {
           console.log("[Tool] Submitting tool outputs back to agent...");
-          await projectClient.agents.runs.submitToolOutputs(threadId, run.id, toolOutputs);
+          await projectClient.agents.submitToolOutputsToRun(threadId, run.id, toolOutputs);
         }
       }
     }
 
-    // --- HANDLE SAFETY FAILURES ---
     let safetyStatus = "passed";
     let failureReason = null;
 
@@ -211,10 +210,9 @@ app.post('/api/chat', async (req, res) => {
       throw new Error(`Run failed: ${run.status}`);
     }
 
-    // --- FETCH RUN STEPS (for tool usage) ---
     const steps = [];
     try {
-      for await (const step of projectClient.agents.runs.steps.list(threadId, run.id)) {
+      for await (const step of projectClient.agents.listRunSteps(threadId, run.id)) {
         steps.push(step);
       }
     } catch (stepErr) {
@@ -229,17 +227,15 @@ app.post('/api/chat', async (req, res) => {
         return calls.map(tc => tc.function?.name || tc.type || 'unknown');
       });
 
-    // --- TIMING ---
     const durationMs = Date.now() - runStartTime;
 
     console.log(`[Messages] Fetching messages from thread ${threadId}`);
     const allMessages = [];
-    for await (const msg of projectClient.agents.messages.list(threadId)) {
+    for await (const msg of projectClient.agents.listMessages(threadId)) {
       allMessages.push(msg);
     }
     console.log(`[Messages] Found ${allMessages.length} messages`);
     
-    // Find the latest assistant message
     const lastMessage = allMessages.find(m => m.role === "assistant");
     
     let content = "";
@@ -304,7 +300,7 @@ app.get('*', (req, res) => res.sendFile(join(__dirname, 'dist', 'index.html')));
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`
-  AZURE AI AGENT SERVICE
+  AZURE AI AGENT SERVICE (SDK 2.0.0-beta.3)
   -----------------------------------
   Project:  ${connectionString}
   Agent:    ${semanticAgentName} (Name-Based)
