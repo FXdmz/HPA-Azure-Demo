@@ -1,6 +1,6 @@
 run = "npm run dev"
 entrypoint = "src/App.tsx"
-modules = ["nodejs-20"]
+modules = ["nodejs-20", "python-3.11"]
 
 [nix]
 channel = "stable-24_05"
@@ -38,10 +38,10 @@ args = "Development"
 name = "Development"
 author = "agent"
 
-[[workflows.workflow.tasks]]
-task = "shell.exec"
-args = "node server.js & npm run dev"
-waitForPort = 5000
-
 [workflows.workflow.metadata]
 outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "bash -c \"python main.py & npm run dev\""
+waitForPort = 5000
