@@ -1,0 +1,209 @@
+Based on your current codebase, pivoting the backend from Node.js to Python is **not scary at all**. In fact, it is often **easier** because the Azure AI SDKs for Python are the "first-class citizens" in the AI world and often receive updates and documentation first.
+
+Since your frontend (`React`) is decoupled from the backend (communicating only via JSON at `/api/chat`), we can swap the Node.js `server.js` for a Python `main.py` without touching a single line of your React code (except maybe the build command).
+
+Here is the **exact migration plan** to swap your backend to Python.
+
+### **1. The "Scariness" Assessment**
+
+| Feature | Difficulty | Notes |
+| --- | --- | --- |
+| **Authentication** | 🟢 Easy | `DefaultAzureCredential` in Python works exactly like `ClientSecretCredential` in JS. |
+| **SDK Parity** | 🟢 High | The `azure-ai-projects` Python library has the exact same methods (`create_thread`, `create_message`, `create_run`) as the Node version. |
+| **Replit Support** | 🟢 Excellent | Replit's Python support is arguably more robust than its Node.js support. |
+| **Frontend Impact** | ⚪ None | As long as the Python API returns the same JSON shape, React won't know the difference. |
+
+---
+
+### **2. The Implementation (Drop-in Replacement)**
+
+We will use **FastAPI**, which is the modern standard for Python AI backends (fast, async, and easy).
+
+#### **Step A: Update `replit.nix**`
+
+You need to add Python to your environment.
+Replace `replit.nix` with:
+
+```nix
+{ pkgs }: {
+  deps = [
+    pkgs.nodejs_20    # Keep this for building the React Frontend
+    pkgs.python311    # Add Python for the Backend
+    pkgs.python311Packages.pip
+  ];
+}
+
+```
+
+#### **Step B: Create `requirements.txt**`
+
+Create a new file named `requirements.txt` in the root:
+
+```text
+fastapi
+uvicorn
+azure-ai-projects
+azure-identity
+python-dotenv
+aiofiles
+
+```
+
+#### **Step C: Create `main.py` (The New Backend)**
+
+Create `main.py` in the root. This code **exactly replicates** the logic of your `server.js` but in Python:
+
+```python
+import os
+import time
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse
+from azure.identity import DefaultAzureCredential
+from azure.ai.projects import AIProjectClient
+from azure.ai.projects.models import MessageRole
+
+app = FastAPI()
+
+# --- CONFIGURATION ---
+CONNECTION_STRING = os.environ.get("AI_FOUNDRY_ENDPOINT")
+AGENT_NAME = os.environ.get("AI_AGENT_NAME")
+
+if not CONNECTION_STRING or not AGENT_NAME:
+    print("❌ MISSING SECRETS: Check AI_FOUNDRY_ENDPOINT and AI_AGENT_NAME")
+
+# --- AUTHENTICATION ---
+# DefaultAzureCredential automatically picks up AZURE_TENANT_ID, CLIENT_ID, SECRET from env
+credential = DefaultAzureCredential()
+project_client = AIProjectClient.from_connection_string(
+    credential=credential,
+    conn_str=CONNECTION_STRING
+)
+
+# --- STATE ---
+cached_agent_id = None
+
+# --- HELPER: Resolve Name to ID ---
+def get_agent_id_by_name(name: str):
+    global cached_agent_id
+    if cached_agent_id:
+        return cached_agent_id
+
+    print(f"🔎 [Registry] Finding agent: '{name}'...")
+    agents = project_client.agents.list_agents()
+    
+    found_agent = next((a for a in agents.data if a.name == name), None)
+    
+    if not found_agent:
+        raise Exception(f"Agent '{name}' not found in project.")
+        
+    print(f"✅ [Registry] Found ID: {found_agent.id}")
+    cached_agent_id = found_agent.id
+    return found_agent.id
+
+# --- API ROUTES ---
+@app.get("/api/health")
+async def health():
+    return {"status": "ok", "agent": AGENT_NAME, "backend": "python-fastapi"}
+
+@app.post("/api/chat")
+async def chat(request: Request):
+    try:
+        body = await request.json()
+        message_content = body.get("message")
+        session_id = body.get("sessionId", "default")
+
+        if notQP message_content:
+            raise HTTPException(status_code=400, detail="Message is required")
+
+        # 1. Resolve Agent
+        agent_id = get_agent_id_by_name(AGENT_NAME)
+
+        # 2. Create Thread (Stateful per request in this demo)
+        thread = project_client.agents.create_thread()
+        print(f"📝 [Thread] Created: {thread.id}")
+
+        # 3. Add Message
+        project_client.agents.create_message(
+            thread_id=thread.id,
+            role="user",
+            content=message_content
+        )
+
+        # 4. Run Agent
+        print(f"🤖 [Run] Starting run...")
+        run = project_client.agents.create_run(thread_id=thread.id, assistant_id=agent_id)
+
+        # 5. Poll for Completion
+        while run.status in ["queued", "in_progress", "requires_action"]:
+            time.sleep(1)
+            run = project_client.agents.get_run(thread_id=thread.id, run_id=run.id)
+            print(f"   Status: {run.status}")
+
+        if run.status != "completed":
+            raise Exception(f"Run failed with status: {run.status}")
+
+        # 6. Get Messages
+        messages = project_client.agents.list_messages(thread_id=thread.id)
+        
+        # Get the latest assistant message
+        last_msg = messages.data[0] # List is usually desc order
+        response_text = ""
+        sources = []
+
+        if last_msg.role == "assistant":
+            for content_item in last_msg.content:
+                if hasattr(content_item, "text"):
+                    response_text += content_item.text.value
+                    if content_item.text.annotations:
+                        sources.append("MovieLabs OMC")
+
+        return {
+            "id": last_msg.id,
+            "content": response_text,
+            "sources": list(set(sources)),
+            "threadId": thread.id
+        }
+
+    except Exception as e:
+        print(f"❌ Error: {str(e)}")
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
+# --- SERVE STATIC FRONTEND ---
+# Mount the React build output
+app.mount("/", StaticFiles(directory="dist", html=True),yb name="static")
+
+if __name__ == "__main__":
+    import uvicorn
+    print(f"🚀 Python Server running on port 5000")
+    uvicorn.run(app, host="0.0.0.0", port=5000)
+
+```
+
+#### **Step D: Update `.replit` Run Command**
+
+Tell Replit to build the React app (Node) but run the Python server.
+
+Update `.replit`:
+
+```toml
+# Build React first, then install Py deps, then run Python server
+run = "npm run build && pip install -r requirements.txt && python main.py"
+
+[nix]
+channel = "stable-24_05"
+
+[deployment]
+run = ["sh", "-c", "npm run build && pip install -r requirements.txt && python main.py"]
+
+```
+
+### **3. Summary of Changes**
+
+You are simply swapping the execution engine.
+
+* **Old:** `server.js` (Express) handles API calls.
+* **New:** `main.py` (FastAPI) handles API calls.
+* **Constant:** The React frontend remains exactly the same.
+
+This is a **low-risk pivot** that gets you onto a tech stack (Python) that is generally more robust for AI engineering.
