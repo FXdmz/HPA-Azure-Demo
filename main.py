@@ -69,6 +69,30 @@ def get_agent_details():
         raise Exception(f"Agent '{AGENT_NAME}' not found.")
     return agent
 
+@app.get("/api/agents")
+async def list_all_agents():
+    try:
+        agents = project_client.agents.list_agents()
+        result = []
+        for agent in agents:
+            tools = []
+            if agent.tools:
+                for t in agent.tools:
+                    if t.type == "function" and hasattr(t, 'function'):
+                        tools.append(f"fn:{t.function.name}")
+                    else:
+                        tools.append(t.type)
+            result.append({
+                "name": agent.name,
+                "id": agent.id,
+                "model": agent.model,
+                "createdAt": agent.created_at.isoformat() if agent.created_at else None,
+                "tools": tools
+            })
+        return {"agents": result}
+    except Exception as e:
+        return JSONResponse(status_code=500, content={"error": str(e)})
+
 @app.get("/api/health")
 async def health():
     try:
@@ -120,11 +144,16 @@ async def chat(request: Request):
         body = await request.json()
         message_content = body.get("message")
         session_id = body.get("sessionId", "default")
+        requested_agent_id = body.get("agentId")
 
         if not message_content:
             raise HTTPException(status_code=400, detail="Message is required")
 
-        agent_id = get_agent_id_by_name(AGENT_NAME or "")
+        if requested_agent_id:
+            agent_id = requested_agent_id
+            print(f"[Chat] Using requested agent: {agent_id}")
+        else:
+            agent_id = get_agent_id_by_name(AGENT_NAME or "")
 
         thread_id = sessions.get(session_id)
         if not thread_id:

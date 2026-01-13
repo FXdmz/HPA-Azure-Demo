@@ -39,14 +39,48 @@ interface AgentDetails {
   createdAt: string | null;
 }
 
+interface AgentListItem {
+  name: string;
+  id: string;
+  model: string;
+  tools: string[];
+  createdAt: string | null;
+}
+
 export class AgentService {
   private sessionId: string;
   private agentInfo: AgentInfo | null = null;
   private agentDetails: AgentDetails | null = null;
+  private selectedAgentId: string | null = null;
 
   constructor() {
     this.sessionId = `session-${Date.now()}`;
     console.log('[AgentService] Initialized with session:', this.sessionId);
+  }
+
+  setSelectedAgent(agentId: string) {
+    this.selectedAgentId = agentId;
+    console.log('[AgentService] Selected agent:', agentId);
+  }
+
+  getSelectedAgentId(): string | null {
+    return this.selectedAgentId;
+  }
+
+  async fetchAllAgents(): Promise<AgentListItem[]> {
+    console.log('[AgentService] Fetching all agents...');
+    try {
+      const response = await fetch('/api/agents');
+      if (!response.ok) {
+        throw new Error('Failed to fetch agents list');
+      }
+      const data = await response.json();
+      console.log('[AgentService] Agents list:', data);
+      return data.agents || [];
+    } catch (error) {
+      console.error('[AgentService] Failed to fetch agents:', error);
+      return [];
+    }
   }
 
   async initialize(): Promise<AgentInfo> {
@@ -109,6 +143,7 @@ export class AgentService {
   async sendMessage(content: string): Promise<AgentResponse> {
     console.log('[AgentService] Sending message:', content);
     console.log('[AgentService] Session ID:', this.sessionId);
+    console.log('[AgentService] Agent ID:', this.selectedAgentId);
     
     const startTime = Date.now();
     
@@ -118,7 +153,8 @@ export class AgentService {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           message: content,
-          sessionId: this.sessionId
+          sessionId: this.sessionId,
+          agentId: this.selectedAgentId
         })
       });
 

@@ -15,7 +15,9 @@ import {
   AlertCircle,
   Cpu,
   Wrench,
-  Database
+  Database,
+  ChevronDown,
+  Bot
 } from "lucide-react";
 import greenlightLogo from "@assets/greenlight_logo_1767803838031.png";
 
@@ -45,6 +47,14 @@ interface Message {
   meta?: MessageMeta;
 }
 
+interface AgentListItem {
+  name: string;
+  id: string;
+  model: string;
+  tools: string[];
+  createdAt: string | null;
+}
+
 export function ChatInterface() {
   const { accounts } = useMsal();
   const account = useAccount(accounts[0] || {});
@@ -58,6 +68,8 @@ export function ChatInterface() {
   const [agentModel, setAgentModel] = useState<string>("");
   const [agentTools, setAgentTools] = useState<string[]>([]);
   const [vectorStoreIds, setVectorStoreIds] = useState<string[]>([]);
+  const [availableAgents, setAvailableAgents] = useState<AgentListItem[]>([]);
+  const [showAgentDropdown, setShowAgentDropdown] = useState(false);
   
   const agentServiceRef = useRef<AgentService | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -74,12 +86,23 @@ export function ChatInterface() {
           setAgentId(result.agentId || '');
           setError(null);
           
+          // Set the default agent ID
+          if (result.agentId) {
+            agentServiceRef.current?.setSelectedAgent(result.agentId);
+          }
+          
           // Fetch additional agent details
           const details = await agentServiceRef.current?.fetchAgentDetails();
           if (details) {
             setAgentModel(details.model || '');
             setAgentTools(details.tools || []);
             setVectorStoreIds(details.vectorStoreIds || []);
+          }
+          
+          // Fetch all available agents
+          const agents = await agentServiceRef.current?.fetchAllAgents();
+          if (agents) {
+            setAvailableAgents(agents);
           }
         })
         .catch((err) => {
@@ -88,6 +111,20 @@ export function ChatInterface() {
         });
     }
   }, [account]);
+
+  const handleAgentSelect = (agent: AgentListItem) => {
+    setAgentName(agent.name);
+    setAgentId(agent.id);
+    setAgentModel(agent.model);
+    setAgentTools(agent.tools);
+    setShowAgentDropdown(false);
+    
+    if (agentServiceRef.current) {
+      agentServiceRef.current.setSelectedAgent(agent.id);
+      agentServiceRef.current.clearHistory();
+    }
+    setMessages([]);
+  };
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -164,9 +201,39 @@ export function ChatInterface() {
                   </Badge>
                 )}
               </CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Agent: {agentName}
-              </p>
+              <div className="relative">
+                <button
+                  onClick={() => setShowAgentDropdown(!showAgentDropdown)}
+                  className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+                >
+                  <Bot className="h-4 w-4" />
+                  <span>{agentName}</span>
+                  <ChevronDown className={`h-3 w-3 transition-transform ${showAgentDropdown ? 'rotate-180' : ''}`} />
+                </button>
+                {showAgentDropdown && availableAgents.length > 0 && (
+                  <div className="absolute top-full left-0 mt-1 w-72 bg-card border border-border rounded-lg shadow-lg z-50 max-h-64 overflow-y-auto">
+                    {availableAgents.map((agent) => (
+                      <button
+                        key={agent.id}
+                        onClick={() => handleAgentSelect(agent)}
+                        className={`w-full text-left px-3 py-2 hover:bg-muted transition-colors first:rounded-t-lg last:rounded-b-lg ${
+                          agent.id === agentId ? 'bg-primary/10 border-l-2 border-primary' : ''
+                        }`}
+                      >
+                        <div className="font-medium text-sm">{agent.name}</div>
+                        <div className="text-xs text-muted-foreground flex items-center gap-2">
+                          <span>{agent.model}</span>
+                          {agent.tools.length > 0 && (
+                            <span className="text-muted-foreground/50">
+                              {agent.tools.length} tool{agent.tools.length > 1 ? 's' : ''}
+                            </span>
+                          )}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               {agentId && agentId !== agentName && (
                 <p className="text-xs text-muted-foreground/70 font-mono">
                   {agentId}
