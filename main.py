@@ -97,24 +97,20 @@ async def list_all_agents():
 async def health():
     try:
         agent = get_agent_details()
-        project_name = CONNECTION_STRING.split("/")[-1] if CONNECTION_STRING else "Unknown"
         return {
             "status": "ok",
             "agentName": agent.name,
             "agentId": agent.id,
-            "projectName": project_name,
-            "projectEndpoint": CONNECTION_STRING,
+            "projectName": CONNECTION_STRING or "Unknown",
             "sdkVersion": "python-azure-ai-projects",
             "mode": "dynamic-resolution"
         }
     except Exception:
-        project_name = CONNECTION_STRING.split("/")[-1] if CONNECTION_STRING else "Unknown"
         return {
             "status": "ok",
             "agentName": AGENT_NAME,
             "agentId": cached_agent_id or AGENT_NAME,
-            "projectName": project_name,
-            "projectEndpoint": CONNECTION_STRING,
+            "projectName": CONNECTION_STRING or "Unknown",
             "sdkVersion": "python-azure-ai-projects",
             "mode": "dynamic-resolution"
         }
