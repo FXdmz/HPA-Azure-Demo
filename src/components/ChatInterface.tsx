@@ -70,7 +70,6 @@ export function ChatInterface() {
   const [vectorStoreIds, setVectorStoreIds] = useState<string[]>([]);
   const [availableAgents, setAvailableAgents] = useState<AgentListItem[]>([]);
   const [showAgentDropdown, setShowAgentDropdown] = useState(false);
-  const [projectName, setProjectName] = useState<string>("");
   
   const agentServiceRef = useRef<AgentService | null>(null);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
@@ -85,7 +84,6 @@ export function ChatInterface() {
           setIsInitialized(result.status === 'ready');
           setAgentName(result.agentName || 'Unknown');
           setAgentId(result.agentId || '');
-          setProjectName(result.projectName || '');
           setError(null);
           
           // Set the default agent ID
