@@ -45,3 +45,8 @@ outputType = "webview"
 task = "shell.exec"
 args = "bash -c \"python main.py & npm run dev\""
 waitForPort = 5000
+
+[userenv]
+
+[userenv.shared]
+AZURE_PROJECT_LABEL = "https://aescheraicanadaeast-resource.services.ai.azure.com/api/projects/aescheraicanadaeast"

@@ -95,14 +95,14 @@ async def list_all_agents():
 
 @app.get("/api/health")
 async def health():
-    current_endpoint = os.environ.get("AI_FOUNDRY_ENDPOINT") or CONNECTION_STRING or "Unknown"
+    project_label = os.environ.get("AZURE_PROJECT_LABEL") or "Unknown"
     try:
         agent = get_agent_details()
         return {
             "status": "ok",
             "agentName": agent.name,
             "agentId": agent.id,
-            "projectName": current_endpoint,
+            "projectName": project_label,
             "sdkVersion": "python-azure-ai-projects",
             "mode": "dynamic-resolution"
         }
@@ -111,7 +111,7 @@ async def health():
             "status": "ok",
             "agentName": AGENT_NAME,
             "agentId": cached_agent_id or AGENT_NAME,
-            "projectName": current_endpoint,
+            "projectName": project_label,
             "sdkVersion": "python-azure-ai-projects",
             "mode": "dynamic-resolution"
         }
