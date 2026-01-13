@@ -203,11 +203,9 @@ export function ChatInterface() {
                   </Badge>
                 )}
               </CardTitle>
-              {projectName && (
-                <p className="text-xs text-muted-foreground/70 mb-1">
-                  Project: {projectName}
-                </p>
-              )}
+              <p className="text-xs text-muted-foreground/70 mb-1">
+                Project: https://aescheraicanadaeast-resource.services.ai.azure.com/api/projects/aescheraicanadaeast
+              </p>
               <div className="relative">
                 <button
                   onClick={() => setShowAgentDropdown(!showAgentDropdown)}
