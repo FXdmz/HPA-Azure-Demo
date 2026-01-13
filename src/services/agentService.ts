@@ -27,6 +27,7 @@ interface AgentInfo {
   agentName: string;
   agentId: string;
   status: string;
+  projectName?: string;
 }
 
 interface AgentDetails {
@@ -94,7 +95,8 @@ export class AgentService {
       this.agentInfo = {
         agentName: data.agentName || 'Unknown',
         agentId: data.agentId || 'Unknown',
-        status: 'ready'
+        status: 'ready',
+        projectName: data.projectName || 'Unknown'
       };
       
       return this.agentInfo;
